@@ -91,11 +91,10 @@ b { font-weight: 700; }
   color: var(--ink);
   cursor: pointer;
   transition: border-color .15s, background .15s;
+  -webkit-tap-highlight-color: transparent;
 }
-.btn:hover:not(:disabled) { border-color: var(--accent); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--accent); padding-inline: 6px; }
-.btn.ghost:hover:not(:disabled) { border-color: transparent; text-decoration: underline; text-underline-offset: 4px; }
 .btn:disabled { opacity: .4; cursor: default; }
 .btn:focus-visible, .opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -125,8 +124,15 @@ b { font-weight: 700; }
   font: 500 1.05rem var(--f-mono);
   cursor: pointer;
   transition: background .15s, border-color .15s, color .15s;
+  -webkit-tap-highlight-color: transparent;
 }
-.opt:hover { border-color: var(--accent); }
+/* Touch screens keep :hover on the last tapped spot, so hover styling is for mouse pointers only.
+   .no-hover is set while the pointer still rests where the previous answer was clicked. */
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn.ghost:hover:not(:disabled) { border-color: transparent; text-decoration: underline; text-underline-offset: 4px; }
+  .scale:not(.no-hover) .opt:hover { border-color: var(--accent); }
+}
 .opt[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .scale-labels { display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: .8rem; color: var(--muted); margin-top: -8px; }
 .scale-labels span:nth-child(2) { text-align: center; }
@@ -483,7 +489,7 @@ figcaption { font-size: .8rem; color: var(--muted); margin-top: 6px; }
     b.setAttribute("role", "radio");
     b.setAttribute("aria-label", v + " " + OPT_LABELS[v - 1]);
     b.textContent = v;
-    b.addEventListener("click", () => choose(v));
+    b.addEventListener("click", (e) => choose(v, e.detail === 0));
     scaleEl.appendChild(b);
     opts.push(b);
   }
@@ -505,20 +511,42 @@ figcaption { font-size: .8rem; color: var(--muted); margin-top: 6px; }
     $("next").textContent = state.idx === N - 1 ? "查看结果 →" : "下一题 →";
   }
 
-  function go(i) {
+  // After a pick the pointer still rests on the same spot, so on the next question that option would
+  // keep :hover (and the click's focus) and look already chosen. Both are dropped until the pointer moves.
+  let lastPointer = null, hoverLock = null;
+  document.addEventListener("pointermove", (e) => {
+    lastPointer = { x: e.clientX, y: e.clientY };
+    if (hoverLock && (Math.abs(e.clientX - hoverLock.x) > 3 || Math.abs(e.clientY - hoverLock.y) > 3)) {
+      hoverLock = null;
+      scaleEl.classList.remove("no-hover");
+    }
+  }, { passive: true });
+
+  // keyboard: the move came from a key, so focus follows to the new question instead of being dropped
+  function go(i, keyboard) {
     clearTimeout(advanceTimer);
-    state.idx = Math.min(Math.max(i, 0), N - 1);
+    const next = Math.min(Math.max(i, 0), N - 1);
+    const changed = next !== state.idx;
+    state.idx = next;
     save();
     renderQuestion();
+    if (!changed) return;
+    scaleEl.classList.add("no-hover");
+    hoverLock = lastPointer || { x: -Infinity, y: -Infinity };
+    const active = document.activeElement;
+    if (opts.includes(active)) {
+      if (keyboard) opts.find((b) => b.tabIndex === 0).focus({ preventScroll: true });
+      else active.blur();
+    }
   }
 
-  function choose(v) {
+  function choose(v, keyboard) {
     state.answers[state.idx] = v;
     save();
     renderQuestion();
     clearTimeout(advanceTimer);
     advanceTimer = setTimeout(() => {
-      if (state.idx < N - 1) go(state.idx + 1);
+      if (state.idx < N - 1) go(state.idx + 1, keyboard);
       else finish(true);
     }, reduceMotion ? 0 : 220);
   }
@@ -550,10 +578,10 @@ figcaption { font-size: .8rem; color: var(--muted); margin-top: 6px; }
     opts[3].focus({ preventScroll: true });
   }
 
-  $("prev").addEventListener("click", () => go(state.idx - 1));
-  $("next").addEventListener("click", () => {
+  $("prev").addEventListener("click", (e) => go(state.idx - 1, e.detail === 0));
+  $("next").addEventListener("click", (e) => {
     if (!state.answers[state.idx]) return;
-    if (state.idx < N - 1) go(state.idx + 1); else finish(true);
+    if (state.idx < N - 1) go(state.idx + 1, e.detail === 0); else finish(true);
   });
   $("retake").addEventListener("click", retake);
 
@@ -561,8 +589,8 @@ figcaption { font-size: .8rem; color: var(--muted); margin-top: 6px; }
     if (quizEl.hidden || e.metaKey || e.ctrlKey || e.altKey) return;
     const t = e.target;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-    if (/^[1-7]$/.test(e.key)) { e.preventDefault(); choose(Number(e.key)); }
-    else if (e.key === "ArrowLeft" && state.idx > 0) { e.preventDefault(); go(state.idx - 1); }
+    if (/^[1-7]$/.test(e.key)) { e.preventDefault(); choose(Number(e.key), true); }
+    else if (e.key === "ArrowLeft" && state.idx > 0) { e.preventDefault(); go(state.idx - 1, true); }
     else if (e.key === "ArrowRight" && state.answers[state.idx]) { e.preventDefault(); $("next").click(); }
   });
 
