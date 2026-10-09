@@ -127,13 +127,14 @@ b { font-weight: 700; }
   -webkit-tap-highlight-color: transparent;
 }
 /* Touch screens keep :hover on the last tapped spot, so hover styling is for mouse pointers only.
-   .no-hover is set while the pointer still rests where the previous answer was clicked. */
+   .no-hover is set while the pointer still rests on the option it was over when the question changed. */
 @media (hover: hover) and (pointer: fine) {
   .btn:hover:not(:disabled) { border-color: var(--accent); }
   .btn.ghost:hover:not(:disabled) { border-color: transparent; text-decoration: underline; text-underline-offset: 4px; }
   .scale:not(.no-hover) .opt:hover { border-color: var(--accent); }
 }
 .opt[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.scale.swap .opt { transition: none; }
 .scale-labels { display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: .8rem; color: var(--muted); margin-top: -8px; }
 .scale-labels span:nth-child(2) { text-align: center; }
 .scale-labels span:nth-child(3) { text-align: right; }
@@ -511,12 +512,21 @@ figcaption { font-size: .8rem; color: var(--muted); margin-top: 6px; }
     $("next").textContent = state.idx === N - 1 ? "查看结果 →" : "下一题 →";
   }
 
-  // After a pick the pointer still rests on the same spot, so on the next question that option would
-  // keep :hover (and the click's focus) and look already chosen. Both are dropped until the pointer moves.
-  let lastPointer = null, hoverLock = null;
+  // After a pick the pointer still rests on the same option, so on the next question that option would
+  // keep :hover (and the click's focus) and look already chosen. Hover styling stays off until the
+  // pointer reaches a different element. hoverLock.el: the option under the pointer, or undefined when
+  // that is not known yet (the first pointermove decides).
+  let hoverLock = null;
+  function lockHover(known) {
+    const el = known ? scaleEl.querySelector(".opt:hover") : undefined;
+    hoverLock = el === null ? null : { el };
+    scaleEl.classList.toggle("no-hover", !!hoverLock);
+  }
   document.addEventListener("pointermove", (e) => {
-    lastPointer = { x: e.clientX, y: e.clientY };
-    if (hoverLock && (Math.abs(e.clientX - hoverLock.x) > 3 || Math.abs(e.clientY - hoverLock.y) > 3)) {
+    if (!hoverLock) return;
+    const over = e.target.closest ? e.target.closest(".opt") : null;
+    if (hoverLock.el === undefined && over) { hoverLock.el = over; return; }
+    if (over !== hoverLock.el) {
       hoverLock = null;
       scaleEl.classList.remove("no-hover");
     }
@@ -526,13 +536,16 @@ figcaption { font-size: .8rem; color: var(--muted); margin-top: 6px; }
   function go(i, keyboard) {
     clearTimeout(advanceTimer);
     const next = Math.min(Math.max(i, 0), N - 1);
-    const changed = next !== state.idx;
+    if (next === state.idx) { save(); renderQuestion(); return; }
     state.idx = next;
     save();
+    // Show the new question's options in their final state at once; .no-hover goes on before the
+    // reflow so a hover border is never computed and then faded out.
+    scaleEl.classList.add("swap");
+    lockHover(true);
     renderQuestion();
-    if (!changed) return;
-    scaleEl.classList.add("no-hover");
-    hoverLock = lastPointer || { x: -Infinity, y: -Infinity };
+    void scaleEl.offsetWidth;
+    scaleEl.classList.remove("swap");
     const active = document.activeElement;
     if (opts.includes(active)) {
       if (keyboard) opts.find((b) => b.tabIndex === 0).focus({ preventScroll: true });
@@ -544,6 +557,7 @@ figcaption { font-size: .8rem; color: var(--muted); margin-top: 6px; }
     state.answers[state.idx] = v;
     save();
     renderQuestion();
+    if (keyboard && opts.includes(document.activeElement)) opts[v - 1].focus({ preventScroll: true });
     clearTimeout(advanceTimer);
     advanceTimer = setTimeout(() => {
       if (state.idx < N - 1) go(state.idx + 1, keyboard);
@@ -572,6 +586,7 @@ figcaption { font-size: .8rem; color: var(--muted); margin-top: 6px; }
     resultEl.hidden = true;
     quizEl.hidden = false;
     $("copy-fallback").hidden = true;
+    lockHover(false);
     renderQuestion();
     highlightMap();
     quizEl.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
