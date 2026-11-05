@@ -1,0 +1,1280 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="写给零基础的网络与代理讲解：IP、端口、TCP/UDP、v2rayN 分流、VPS、节点链接、DNS/WebRTC/IPv6 泄露和浏览器指纹。">
+<title>代理与 VPS 入门</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700;900&display=swap">
+<style>
+/* Layout: 教科书式阅读栏 + 左侧章节目录；"动手试试"是可以操作的实验台。TCP 用蓝、UDP 用紫红，全页统一 */
+:root{
+  --bg:#F1F4F7;
+  --surface:#FFFFFF;
+  --surface-2:#E7ECF2;
+  --ink:#141D28;
+  --muted:#556275;
+  --line:#D0D8E2;
+  --accent:#0A6971;
+  --accent-soft:#D6ECEE;
+  --tcp:#2B50C4;
+  --tcp-soft:#E0E6FA;
+  --udp:#97307B;
+  --udp-soft:#F4DFEE;
+  --ok:#27754A;
+  --ok-soft:#DCF0E3;
+  --warn:#8C5D00;
+  --warn-soft:#F8EDCF;
+  --bad:#B5302A;
+  --bad-soft:#F9E0DD;
+  --code-bg:#EAEFF4;
+  --f-display:"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+  --f-body:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono","Cascadia Mono",Consolas,"Courier New",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E131A; --surface:#151C25; --surface-2:#1C2530; --ink:#E4E9F0; --muted:#98A4B3; --line:#293443;
+    --accent:#4CB5BD; --accent-soft:#12343A;
+    --tcp:#8AA2F2; --tcp-soft:#1B2547; --udp:#DA86C4; --udp-soft:#36192F;
+    --ok:#62C690; --ok-soft:#15301F; --warn:#E2B44E; --warn-soft:#33290F; --bad:#F1786D; --bad-soft:#3B1B18;
+    --code-bg:#1A222C;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E131A; --surface:#151C25; --surface-2:#1C2530; --ink:#E4E9F0; --muted:#98A4B3; --line:#293443;
+  --accent:#4CB5BD; --accent-soft:#12343A;
+  --tcp:#8AA2F2; --tcp-soft:#1B2547; --udp:#DA86C4; --udp-soft:#36192F;
+  --ok:#62C690; --ok-soft:#15301F; --warn:#E2B44E; --warn-soft:#33290F; --bad:#F1786D; --bad-soft:#3B1B18;
+  --code-bg:#1A222C;
+  color-scheme:dark;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.8;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-underline-offset:3px}
+a:hover{text-decoration-thickness:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+code,.mono{font-family:var(--f-mono);font-size:.86em}
+code{background:var(--code-bg);padding:.1em .4em;border-radius:4px;overflow-wrap:anywhere}
+strong{font-weight:700}
+.tcp-t{color:var(--tcp);font-weight:700}
+.udp-t{color:var(--udp);font-weight:700}
+
+.page{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:48px 96px}
+
+/* ---------- hero ---------- */
+.hero{display:grid;gap:28px;margin-bottom:56px}
+.eyebrow{font-family:var(--f-mono);font-size:.78rem;letter-spacing:.14em;color:var(--accent);margin:0}
+.hero h1{font-family:var(--f-display);font-weight:900;font-size:clamp(2.2rem,1.4rem + 3.4vw,3.6rem);line-height:1.15;margin:0;text-wrap:balance;letter-spacing:.02em}
+.lede{font-size:1.12rem;color:var(--muted);max-width:40em;margin:0}
+
+.flow{display:flex;align-items:stretch;gap:6px}
+.flow .node{flex:1 1 0;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:2px;align-content:start}
+.flow .node b{font-size:.98rem}
+.flow .node span{font-size:.82rem;color:var(--muted);line-height:1.55}
+.flow .node.wall{background:var(--bad-soft);border-style:dashed;border-color:var(--bad)}
+.flow .node.wall b{color:var(--bad)}
+.flow .node.mine{border-color:var(--accent);background:var(--accent-soft)}
+.flow .arr{align-self:center;color:var(--muted);font-family:var(--f-mono);font-size:1.1rem;flex:0 0 auto}
+@media (max-width:760px){
+  .flow{flex-direction:column}
+  .flow .arr{transform:rotate(90deg);align-self:center;line-height:1}
+}
+
+.five{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 24px}
+.five h2{font-family:var(--f-display);font-size:1.15rem;margin:0 0 10px}
+.five ul{margin:0;padding-left:1.2em;display:grid;gap:6px}
+
+/* ---------- layout ---------- */
+.layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:56px;align-items:start}
+.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);font-size:.9rem}
+.toc p{font-family:var(--f-mono);font-size:.72rem;letter-spacing:.14em;color:var(--muted);margin:0 0 8px}
+.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px;counter-reset:toc}
+.toc a{display:grid;grid-template-columns:2.2em minmax(0,1fr);padding:5px 8px;border-radius:6px;color:var(--muted);text-decoration:none;line-height:1.5}
+.toc a .n{font-family:var(--f-mono);font-size:.78rem;padding-top:1px}
+.toc a:hover{background:var(--surface-2);color:var(--ink)}
+.toc a[aria-current="true"]{background:var(--surface);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.toc a[aria-current="true"] .n{color:var(--accent)}
+@media (max-width:980px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:24px}
+  .toc{position:static;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .toc ol{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:480px){.toc ol{grid-template-columns:minmax(0,1fr)}}
+
+main{min-width:0;max-width:46rem}
+section{padding-block:48px 8px;border-top:1px solid var(--line);scroll-margin-top:16px}
+section:first-child{border-top:0;padding-top:0}
+.ch{font-family:var(--f-mono);font-size:.76rem;letter-spacing:.14em;color:var(--accent);margin:0 0 6px}
+h2{font-family:var(--f-display);font-weight:700;font-size:clamp(1.55rem,1.2rem + 1.4vw,2.1rem);line-height:1.35;margin:0 0 18px;text-wrap:balance}
+h3{font-size:1.12rem;font-weight:700;margin:32px 0 10px;line-height:1.5;text-wrap:balance}
+p{margin:0 0 1em}
+ul,ol{margin:0 0 1em;padding-left:1.3em}
+li{margin-bottom:.3em}
+
+/* ---------- definition cards ---------- */
+.defs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 20px;padding:0}
+.defs > div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:4px;align-content:start}
+.defs dt{font-weight:700;font-size:1.02rem;display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.defs dd{margin:0;color:var(--ink);font-size:.95rem;line-height:1.7}
+.like{font-size:.76rem;font-weight:500;color:var(--muted);background:var(--surface-2);padding:1px 8px;border-radius:999px}
+@media (max-width:620px){.defs{grid-template-columns:minmax(0,1fr)}}
+
+.aside{background:var(--surface-2);border-radius:10px;padding:14px 18px;margin:0 0 20px;font-size:.96rem}
+.aside .lbl{display:block;font-family:var(--f-mono);font-size:.72rem;letter-spacing:.14em;color:var(--muted);margin-bottom:4px}
+.aside p:last-child{margin-bottom:0}
+
+/* ---------- tables ---------- */
+.tbl{overflow-x:auto;margin:0 0 20px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.92rem;line-height:1.6}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:700;background:var(--surface-2);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.num,th.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.tag{display:inline-block;font-family:var(--f-mono);font-size:.74rem;font-weight:600;padding:1px 7px;border-radius:5px;white-space:nowrap}
+.tag.tcp{background:var(--tcp-soft);color:var(--tcp)}
+.tag.udp{background:var(--udp-soft);color:var(--udp)}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}
+.tag.bad{background:var(--bad-soft);color:var(--bad)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+
+/* ---------- lab (interactive) ---------- */
+.lab{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;margin:8px 0 28px;display:grid;gap:14px}
+.lab-head{display:grid;gap:2px}
+.lab-tag{font-family:var(--f-mono);font-size:.72rem;letter-spacing:.16em;color:var(--accent)}
+.lab h3{margin:0}
+.lab p{margin:0;color:var(--muted);font-size:.94rem}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:inherit;font-size:.9rem;line-height:1.4;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:6px 14px;cursor:pointer;text-align:left}
+.chip:hover{border-color:var(--muted)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg)}
+.seg button{font:inherit;font-size:.9rem;border:0;background:transparent;color:var(--ink);padding:8px 14px;cursor:pointer}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--surface)}
+.lab-row{display:grid;gap:6px}
+.lab-row > span{font-size:.8rem;color:var(--muted)}
+
+.addr-code{font-family:var(--f-mono);font-size:1.15rem;background:var(--code-bg);border-radius:8px;padding:10px 14px;overflow-wrap:anywhere}
+.addr-parts{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.addr-parts li{display:grid;grid-template-columns:minmax(0,9em) minmax(0,1fr);gap:12px;margin:0;font-size:.94rem}
+.addr-parts b{font-family:var(--f-mono);font-size:.88rem;overflow-wrap:anywhere}
+.addr-parts em{font-style:normal;font-size:.76rem;color:var(--accent);display:block}
+.addr-note{font-weight:500;margin:0}
+@media (max-width:480px){.addr-parts li{grid-template-columns:minmax(0,1fr);gap:2px}}
+
+/* simulator */
+.path{list-style:none;margin:0;padding:0;display:grid}
+.step{display:grid;grid-template-columns:22px minmax(0,1fr);gap:12px;margin:0;position:relative;padding-bottom:14px}
+.step:last-child{padding-bottom:0}
+.step::before{content:"";position:absolute;left:10px;top:20px;bottom:-2px;width:2px;background:var(--line)}
+.step:last-child::before{display:none}
+.dot{width:22px;height:22px;border-radius:50%;background:var(--surface-2);border:2px solid var(--muted);margin-top:2px;position:relative;z-index:1}
+.step.app .dot{border-color:var(--ink)}
+.step.gate .dot{border-color:var(--accent);background:var(--accent-soft)}
+.step.rule .dot{border-color:var(--accent);background:var(--accent)}
+.step.proxy .dot{border-color:var(--tcp);background:var(--tcp-soft)}
+.step.direct .dot{border-color:var(--ok);background:var(--ok-soft)}
+.step.block .dot{border-color:var(--bad);background:var(--bad-soft)}
+.step .who{font-family:var(--f-mono);font-size:.72rem;letter-spacing:.1em;color:var(--muted);display:block}
+.step .what{font-size:.95rem;line-height:1.65}
+.verdict{border-radius:10px;padding:12px 16px;font-size:.96rem;line-height:1.7}
+.verdict b{display:block;font-size:.8rem;letter-spacing:.08em}
+.verdict.ok{background:var(--ok-soft)} .verdict.ok b{color:var(--ok)}
+.verdict.warn{background:var(--warn-soft)} .verdict.warn b{color:var(--warn)}
+.verdict.bad{background:var(--bad-soft)} .verdict.bad b{color:var(--bad)}
+
+/* vless anatomy */
+.link{font-family:var(--f-mono);font-size:.9rem;line-height:2.1;background:var(--code-bg);border-radius:10px;padding:12px 14px;overflow-wrap:anywhere;word-break:break-all}
+.link .sep{color:var(--muted)}
+.part{font:inherit;color:var(--ink);background:transparent;border:0;border-bottom:2px solid var(--line);padding:1px 2px;cursor:pointer;border-radius:3px 3px 0 0;word-break:break-all;text-align:left}
+.part:hover{background:var(--surface-2)}
+.part[aria-pressed="true"]{background:var(--accent-soft);border-bottom-color:var(--accent)}
+.part.secret{border-bottom-color:var(--bad)}
+.part-detail{display:grid;gap:6px;min-height:7.5em}
+.part-detail h4{margin:0;font-size:1.05rem;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.part-detail p{color:var(--ink);font-size:.95rem}
+
+/* sequence diagrams */
+.seq-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 20px}
+.seq{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:10px;align-content:start}
+.seq h3{margin:0;font-size:1.05rem}
+.seq ul{margin:0;font-size:.92rem;padding-left:1.1em}
+.seq svg{width:100%;height:auto;display:block}
+.seq.tcp h3{color:var(--tcp)}
+.seq.udp h3{color:var(--udp)}
+@media (max-width:640px){.seq-grid{grid-template-columns:minmax(0,1fr)}}
+svg .lane{stroke:var(--line);stroke-width:2}
+svg .who{fill:var(--muted);font-family:var(--f-body);font-size:12px}
+svg .lbl{fill:var(--ink);font-family:var(--f-body);font-size:11px}
+svg .a-tcp{stroke:var(--tcp);stroke-width:2;fill:none}
+svg .a-udp{stroke:var(--udp);stroke-width:2;fill:none}
+svg .a-lost{stroke:var(--udp);stroke-width:2;fill:none;stroke-dasharray:4 4;opacity:.6}
+svg .x{stroke:var(--bad);stroke-width:2.5}
+svg .h-tcp{fill:var(--tcp)}
+svg .h-udp{fill:var(--udp)}
+svg .note{fill:var(--muted);font-family:var(--f-body);font-size:11px}
+
+/* protocol stack */
+.stack{display:grid;grid-template-columns:auto repeat(2,minmax(0,1fr));gap:6px;margin:0 0 20px;font-size:.9rem;align-items:stretch}
+.stack .h{font-weight:700;text-align:center;padding:4px}
+.stack .lv{font-family:var(--f-mono);font-size:.72rem;color:var(--muted);align-self:center;padding-right:6px;white-space:nowrap}
+.stack .c{border-radius:8px;padding:8px 10px;text-align:center;line-height:1.45}
+.stack .c small{display:block;font-size:.75rem;opacity:.85}
+.stack .t{background:var(--tcp-soft);color:var(--tcp)}
+.stack .u{background:var(--udp-soft);color:var(--udp)}
+.stack .n{background:var(--surface-2);color:var(--ink)}
+.stack .w{grid-column:span 2}
+
+/* chain */
+.chain{list-style:none;margin:0 0 20px;padding:0;display:grid;gap:0;counter-reset:c}
+.chain li{display:grid;grid-template-columns:2.4em minmax(0,1fr);gap:10px;margin:0;padding:10px 0;border-bottom:1px dashed var(--line);counter-increment:c}
+.chain li:last-child{border-bottom:0}
+.chain li::before{content:counter(c);font-family:var(--f-mono);font-size:.8rem;color:var(--accent);background:var(--accent-soft);border-radius:6px;text-align:center;height:1.9em;line-height:1.9em}
+.chain b{display:block}
+.chain span{font-size:.92rem;color:var(--muted)}
+
+.rules{list-style:none;margin:0 0 20px;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface);counter-reset:r}
+.rules li{display:grid;grid-template-columns:2em minmax(0,1fr) auto;gap:10px;align-items:center;margin:0;padding:9px 12px;border-bottom:1px solid var(--line);font-size:.93rem;counter-increment:r}
+.rules li:last-child{border-bottom:0}
+.rules li::before{content:counter(r);font-family:var(--f-mono);font-size:.78rem;color:var(--muted)}
+.rules li.hot{background:var(--warn-soft)}
+
+.layers{list-style:none;margin:0 0 20px;padding:0;display:grid;gap:6px}
+.layers li{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:grid;gap:2px}
+.layers li:nth-child(2){margin-inline:10px}
+.layers li:nth-child(3){margin-inline:20px}
+.layers li:nth-child(4){margin-inline:30px}
+.layers li:nth-child(5){margin-inline:40px;border-color:var(--accent)}
+.layers b{font-size:.98rem}
+.layers span{font-size:.9rem;color:var(--muted)}
+@media (max-width:480px){.layers li:nth-child(n){margin-inline:0}}
+
+.steps{counter-reset:s;list-style:none;padding:0;margin:0 0 20px;display:grid;gap:10px}
+.steps li{position:relative;padding-left:2.6em;min-height:1.9em;margin:0;counter-increment:s}
+.steps li::before{content:counter(s);position:absolute;left:0;top:.2em;font-family:var(--f-mono);font-weight:600;color:var(--surface);background:var(--ink);border-radius:50%;width:1.9em;height:1.9em;line-height:1.9em;text-align:center;font-size:.85rem}
+
+.dont{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 20px;padding:0;list-style:none}
+.dont li{margin:0;background:var(--bad-soft);border-radius:8px;padding:10px 14px;font-size:.94rem}
+.dont li b{color:var(--bad)}
+@media (max-width:560px){.dont{grid-template-columns:minmax(0,1fr)}}
+
+/* glossary */
+.gl-tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 14px}
+.gl-tools input{font:inherit;font-size:1rem;flex:1 1 220px;min-width:0;padding:9px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.gl-tools input::placeholder{color:var(--muted)}
+.gl-count{font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.gl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0}
+.gl > div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:grid;gap:2px;align-content:start}
+.gl dt{font-weight:700;display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
+.gl dt small{font-weight:400;font-size:.78rem;color:var(--muted);font-family:var(--f-mono)}
+.gl dd{margin:0;font-size:.92rem;line-height:1.65}
+.gl dd a{font-size:.8rem;white-space:nowrap}
+.gl-empty{color:var(--muted);font-size:.95rem}
+@media (max-width:620px){.gl{grid-template-columns:minmax(0,1fr)}}
+
+/* privacy chapter */
+.alert{border-radius:10px;padding:12px 16px;margin:0 0 20px;font-size:.95rem;line-height:1.75}
+.alert b{display:block;font-size:.82rem;letter-spacing:.06em;margin-bottom:2px}
+.alert.warn{background:var(--warn-soft)}
+.alert.warn b{color:var(--warn)}
+.leak{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:0 0 12px;display:grid;gap:10px}
+.leak h4{margin:0;font-size:1.05rem;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.leak dl{margin:0;display:grid;grid-template-columns:6.5em minmax(0,1fr);gap:8px 14px;font-size:.94rem;line-height:1.7}
+.leak dt{color:var(--muted);font-size:.84rem;padding-top:.2em}
+.leak dd{margin:0;min-width:0}
+@media (max-width:520px){.leak dl{grid-template-columns:minmax(0,1fr);gap:2px}.leak dd{margin-bottom:8px}}
+.fp td:first-child{white-space:nowrap;font-weight:500}
+.fp td:nth-child(2){font-family:var(--f-mono);font-size:.82rem;overflow-wrap:anywhere;word-break:break-all;min-width:9em}
+.fp td:nth-child(3){color:var(--muted);font-size:.88rem;min-width:10em}
+.check{list-style:none;padding:0;margin:0 0 12px;display:grid;gap:8px}
+.check li{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.check input{width:18px;height:18px;margin:.35em 0 0;accent-color:var(--accent)}
+.check label{font-size:.95rem;line-height:1.7;cursor:pointer}
+.check li.done{background:var(--ok-soft);border-color:transparent}
+.check-foot{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:.85rem;color:var(--muted);margin:0 0 20px}
+.linkbtn{font:inherit;font-size:.85rem;background:none;border:0;color:var(--accent);cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px}
+
+.foot{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);font-size:.86rem;color:var(--muted)}
+</style>
+
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <p class="eyebrow">写给零基础的你 · 2026 年 11 月</p>
+    <h1>代理与 VPS 入门</h1>
+    <p class="lede">上网，就是你的电脑和世界各地的电脑互相寄包裹。代理的意思是：包裹先寄给你在海外租的一台电脑，由它替你转寄，回信也由它转给你。这一页从"地址怎么写"讲起，一直讲到一台自建 VPS 上跑着什么。</p>
+
+    <div class="flow" aria-label="代理的整体流程">
+      <div class="node"><b>你的电脑</b><span>浏览器、微信、游戏……发出请求</span></div>
+      <div class="arr" aria-hidden="true">→</div>
+      <div class="node mine"><b>v2rayN</b><span>分拣：国内的直接送，国外的加密打包</span></div>
+      <div class="arr" aria-hidden="true">→</div>
+      <div class="node wall"><b>跨境出口</b><span>审查系统检查包裹，看不出是代理就放行</span></div>
+      <div class="arr" aria-hidden="true">→</div>
+      <div class="node mine"><b>你的 VPS</b><span>海外服务器，拆包后替你去取</span></div>
+      <div class="arr" aria-hidden="true">→</div>
+      <div class="node"><b>目标网站</b><span>Google、YouTube、GitHub……</span></div>
+    </div>
+
+    <div class="five">
+      <h2>先记住这五句话</h2>
+      <ul>
+        <li><strong>IP</strong> 是门牌号，<strong>端口</strong>是房间号，<strong>域名</strong>是名字，<strong>DNS</strong> 是把名字查成门牌号的通讯录。</li>
+        <li><span class="tcp-t">TCP</span> 像打电话，确认对方听到才往下说；<span class="udp-t">UDP</span> 像寄明信片，寄出去就不管了。</li>
+        <li><strong>系统代理</strong>只管"听话"的程序的 TCP 流量；<strong>TUN 模式</strong>接管整台电脑的全部流量。</li>
+        <li><strong>路由规则</strong>决定每个包裹走哪条路：国内直连，国外走代理，少数直接拦下。</li>
+        <li>你的<strong>节点链接</strong>（<code>vless://…</code>）就是服务器的钥匙，不要发给别人，截图记得打码。</li>
+      </ul>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="toc" aria-label="目录">
+      <p>目录</p>
+      <ol>
+        <li><a href="#ch1"><span class="n">01</span><span>地址：IP、端口、域名</span></a></li>
+        <li><a href="#ch2"><span class="n">02</span><span>送法：TCP 和 UDP</span></a></li>
+        <li><a href="#ch3"><span class="n">03</span><span>网页：HTTPS 与 QUIC</span></a></li>
+        <li><a href="#ch4"><span class="n">04</span><span>代理是什么</span></a></li>
+        <li><a href="#ch5"><span class="n">05</span><span>电脑上的 v2rayN</span></a></li>
+        <li><a href="#ch6"><span class="n">06</span><span>"UDP 出不去"是怎么回事</span></a></li>
+        <li><a href="#ch7"><span class="n">07</span><span>VPS 服务器</span></a></li>
+        <li><a href="#ch8"><span class="n">08</span><span>拆开一条节点链接</span></a></li>
+        <li><a href="#ch9"><span class="n">09</span><span>藏住真实 IP</span></a></li>
+        <li><a href="#ch10"><span class="n">10</span><span>安全守则与排错</span></a></li>
+        <li><a href="#words"><span class="n">附</span><span>术语表</span></a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <!-- ============ 1 ============ -->
+      <section id="ch1">
+        <p class="ch">第 1 章</p>
+        <h2>网络上的地址：IP、端口、域名、DNS</h2>
+        <p>寄快递要写地址，网络也一样。每个数据包上都写着"从哪来、到哪去"。地址由几部分组成：</p>
+        <dl class="defs">
+          <div><dt>IP 地址 <span class="like">像门牌号</span></dt><dd>每台联网设备都有，长这样：<code>104.16.249.249</code>（IPv4），或更长的 <code>2606:4700::1111</code>（IPv6）。</dd></div>
+          <div><dt>端口 <span class="like">像房间号</span></dt><dd>一台电脑上有 1 到 65535 号"房间"，不同程序守在不同房间。写在 IP 后面，用冒号隔开：<code>IP:端口</code>。</dd></div>
+          <div><dt>域名 <span class="like">像名字</span></dt><dd><code>www.google.com</code> 这样好记的名字。电脑真正连接时，要先把名字换成 IP。</dd></div>
+          <div><dt>DNS <span class="like">像通讯录</span></dt><dd>负责把域名查成 IP 的服务。如果有人在你查的时候塞给你一个假地址，就叫 DNS 污染。</dd></div>
+        </dl>
+
+        <h3>三种特别的 IP</h3>
+        <ul>
+          <li><strong>公网 IP</strong>：全世界都能找到的门牌号。VPS 都有一个固定的公网 IP。</li>
+          <li><strong>内网 IP</strong>：只在家里、宿舍、学校内部有效，常见的是 <code>192.168.x.x</code>、<code>10.x.x.x</code>。路由器后台一般是 <code>192.168.1.1</code>。</li>
+          <li><strong><code>127.0.0.1</code></strong>：永远指"这台电脑自己"。包裹不出门，只是交给本机上的另一个程序。</li>
+        </ul>
+
+        <div class="lab" id="addrLab">
+          <div class="lab-head"><span class="lab-tag">动手试试</span><h3>拆开一个地址</h3></div>
+          <p>点一个你见过的地址，看看每一段是什么意思。</p>
+          <div class="chips" role="group" aria-label="选择地址">
+            <button class="chip" type="button" data-addr="loop" aria-pressed="true">127.0.0.1:10808</button>
+            <button class="chip" type="button" data-addr="google" aria-pressed="false">www.google.com:443</button>
+            <button class="chip" type="button" data-addr="router" aria-pressed="false">192.168.1.1</button>
+            <button class="chip" type="button" data-addr="ssh" aria-pressed="false">VPS 的 IP:22</button>
+          </div>
+          <div class="addr-code" id="addrCode">127.0.0.1:10808</div>
+          <ul class="addr-parts" id="addrParts"></ul>
+          <p class="addr-note" id="addrNote"></p>
+        </div>
+
+        <h3>你会经常碰到的端口</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th class="num">端口</th><th>送法</th><th>谁在用</th><th>在哪会见到</th></tr></thead>
+            <tbody>
+              <tr><td class="num">22</td><td><span class="tag tcp">TCP</span></td><td>SSH 远程登录</td><td>Xshell 连 VPS</td></tr>
+              <tr><td class="num">53</td><td><span class="tag udp">UDP</span></td><td>DNS 查询</td><td>v2rayN 的 DNS 设置</td></tr>
+              <tr><td class="num">80</td><td><span class="tag tcp">TCP</span></td><td>不加密的网页（http://）</td><td>路由器后台</td></tr>
+              <tr><td class="num">443</td><td><span class="tag tcp">TCP</span></td><td>加密网页（https://）</td><td>几乎所有网站；很多节点也用它伪装</td></tr>
+              <tr><td class="num">443</td><td><span class="tag udp">UDP</span></td><td>QUIC / HTTP/3</td><td>v2rayN 默认拦截的那个</td></tr>
+              <tr><td class="num">10808</td><td><span class="tag tcp">TCP</span> <span class="tag udp">UDP</span></td><td>v2rayN 的本地收件窗口</td><td>Windows 系统代理设置里</td></tr>
+              <tr><td class="num">3478 / 19302</td><td><span class="tag udp">UDP</span></td><td>STUN（视频通话用）</td><td>第 6 章的 UDP 测试</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>同一个端口号，TCP 和 UDP 是两个不同的房间。TCP 443 和 UDP 443 互不相干，所以 UDP 443 被拦时，普通网页（TCP 443）照样能开。</p>
+      </section>
+
+      <!-- ============ 2 ============ -->
+      <section id="ch2">
+        <p class="ch">第 2 章</p>
+        <h2>数据怎么送：TCP 和 UDP</h2>
+        <p>地址写好了，接下来是"怎么送"。网络上最常用的送法有两种。</p>
+
+        <div class="seq-grid">
+          <div class="seq tcp">
+            <h3>TCP：像打电话</h3>
+            <svg viewBox="0 0 300 250" role="img" aria-label="TCP 先握手，每段数据都有回执">
+              <defs>
+                <marker id="ht" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="h-tcp" d="M0,0 L10,5 L0,10 z"/></marker>
+              </defs>
+              <text class="who" x="50" y="18" text-anchor="middle">你</text>
+              <text class="who" x="250" y="18" text-anchor="middle">对方</text>
+              <line class="lane" x1="50" y1="28" x2="50" y2="240"/>
+              <line class="lane" x1="250" y1="28" x2="250" y2="240"/>
+              <line class="a-tcp" x1="50" y1="44" x2="248" y2="62" marker-end="url(#ht)"/>
+              <text class="lbl" x="150" y="44" text-anchor="middle">在吗？（握手 1）</text>
+              <line class="a-tcp" x1="250" y1="80" x2="52" y2="98" marker-end="url(#ht)"/>
+              <text class="lbl" x="150" y="80" text-anchor="middle">在，你说（握手 2）</text>
+              <line class="a-tcp" x1="50" y1="116" x2="248" y2="134" marker-end="url(#ht)"/>
+              <text class="lbl" x="150" y="116" text-anchor="middle">好，开始了（握手 3）</text>
+              <line class="a-tcp" x1="50" y1="158" x2="248" y2="176" marker-end="url(#ht)"/>
+              <text class="lbl" x="150" y="158" text-anchor="middle">数据 1</text>
+              <line class="a-tcp" x1="250" y1="194" x2="52" y2="212" marker-end="url(#ht)"/>
+              <text class="lbl" x="150" y="194" text-anchor="middle">收到 1，接着发</text>
+              <text class="note" x="150" y="236" text-anchor="middle">没收到"收到"，就重发</text>
+            </svg>
+            <ul>
+              <li>先握手，确认对方在线</li>
+              <li>每段数据都要回执，丢了重发</li>
+              <li>按顺序到达，不缺不重</li>
+              <li>代价：多了来回确认，稍慢</li>
+            </ul>
+            <p style="margin:0;font-size:.9rem"><strong>谁在用：</strong>网页、下载、SSH、VLESS 节点</p>
+          </div>
+          <div class="seq udp">
+            <h3>UDP：像寄明信片</h3>
+            <svg viewBox="0 0 300 250" role="img" aria-label="UDP 直接发送，不回执，丢了就丢了">
+              <defs>
+                <marker id="hu" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="h-udp" d="M0,0 L10,5 L0,10 z"/></marker>
+              </defs>
+              <text class="who" x="50" y="18" text-anchor="middle">你</text>
+              <text class="who" x="250" y="18" text-anchor="middle">对方</text>
+              <line class="lane" x1="50" y1="28" x2="50" y2="240"/>
+              <line class="lane" x1="250" y1="28" x2="250" y2="240"/>
+              <line class="a-udp" x1="50" y1="44" x2="248" y2="62" marker-end="url(#hu)"/>
+              <text class="lbl" x="150" y="44" text-anchor="middle">声音片段 1</text>
+              <line class="a-udp" x1="50" y1="82" x2="248" y2="100" marker-end="url(#hu)"/>
+              <text class="lbl" x="150" y="82" text-anchor="middle">声音片段 2</text>
+              <line class="a-lost" x1="50" y1="120" x2="160" y2="130"/>
+              <line class="x" x1="156" y1="122" x2="168" y2="136"/>
+              <line class="x" x1="168" y1="122" x2="156" y2="136"/>
+              <text class="lbl" x="110" y="116" text-anchor="middle">片段 3（丢了）</text>
+              <line class="a-udp" x1="50" y1="158" x2="248" y2="176" marker-end="url(#hu)"/>
+              <text class="lbl" x="150" y="158" text-anchor="middle">声音片段 4</text>
+              <line class="a-udp" x1="50" y1="196" x2="248" y2="214" marker-end="url(#hu)"/>
+              <text class="lbl" x="150" y="196" text-anchor="middle">声音片段 5</text>
+              <text class="note" x="150" y="236" text-anchor="middle">对方不回话，丢了也不补</text>
+            </svg>
+            <ul>
+              <li>不握手，直接发</li>
+              <li>不回执、不重发</li>
+              <li>可能乱序、可能丢</li>
+              <li>好处：快，延迟低</li>
+            </ul>
+            <p style="margin:0;font-size:.9rem"><strong>谁在用：</strong>语音视频通话、游戏、直播、DNS、QUIC</p>
+          </div>
+        </div>
+
+        <div class="aside">
+          <span class="lbl">为什么通话和游戏要用 UDP</span>
+          <p>半秒钟前的一句话，就算重发回来也已经没用了，不如丢掉继续往下说。游戏里你角色的位置也是同理，只有最新的位置有意义。所以这类程序宁可偶尔丢一点，也不愿等。</p>
+        </div>
+      </section>
+
+      <!-- ============ 3 ============ -->
+      <section id="ch3">
+        <p class="ch">第 3 章</p>
+        <h2>网页是怎么说话的：HTTP、HTTPS、TLS、QUIC</h2>
+        <dl class="defs">
+          <div><dt>HTTP</dt><dd>浏览器和网站之间对话的格式。"请给我这个页面"，"给你"。</dd></div>
+          <div><dt>TLS <span class="like">像保险信封</span></dt><dd>加密层。内容装进只有双方能拆开的信封，路上的人看不到里面写了什么。</dd></div>
+          <div><dt>HTTPS</dt><dd>HTTP 加上 TLS。浏览器地址栏的小锁就表示用的是它。</dd></div>
+          <div><dt>证书 <span class="like">像身份证</span></dt><dd>网站出示的身份证明，由权威机构签发，证明"我真的是 google.com"。</dd></div>
+        </dl>
+
+        <h3>信封外面还写着名字：SNI</h3>
+        <p>TLS 能把信的内容藏起来，但在加密开始之前，浏览器得先说一句"我要找 www.google.com"，好让对方拿出对应的证书。这句话写在信封外面，叫 <strong>SNI</strong>（服务器名称指示）。路上的人看得到它，审查系统也就能据此判断你要去哪。第 8 章讲的 REALITY 伪装，就是从这里下手的。</p>
+
+        <h3>HTTP/3 和 QUIC</h3>
+        <p>HTTP 有好几代。前几代都跑在 <span class="tcp-t">TCP</span> 上，最新的 HTTP/3 改成跑在 <strong>QUIC</strong> 上，而 QUIC 是建在 <span class="udp-t">UDP</span> 上的，用的是 <strong>UDP 443</strong> 端口。它把 TCP 的可靠和 TLS 的加密都自己做了一遍，在手机网络这种不稳定的环境下更快。</p>
+        <div class="stack" role="img" aria-label="HTTP/2 跑在 TLS 和 TCP 上；HTTP/3 跑在 QUIC 和 UDP 上">
+          <div></div><div class="h">老办法</div><div class="h">新办法</div>
+          <div class="lv">网页层</div><div class="c n">HTTP/1.1、HTTP/2</div><div class="c n">HTTP/3</div>
+          <div class="lv">加密层</div><div class="c t">TLS</div><div class="c u">QUIC<small>（自带加密和重发）</small></div>
+          <div class="lv">送法</div><div class="c t">TCP 443</div><div class="c u">UDP 443</div>
+          <div class="lv">地址</div><div class="c n w">IP</div>
+        </div>
+        <p>浏览器的做法是：能用 HTTP/3 就用，用不了就自动换回 HTTP/2（走 TCP）。所以 QUIC 被挡，网页照样打开，你基本感觉不到区别。</p>
+      </section>
+
+      <!-- ============ 4 ============ -->
+      <section id="ch4">
+        <p class="ch">第 4 章</p>
+        <h2>为什么需要代理，代理又是什么</h2>
+        <p>在国内直接访问一部分境外网站是打不开的。跨境的网络出口处有一套审查系统（常被叫作"防火长城"，简称"墙"或 GFW），它主要用这几种办法：</p>
+        <ul>
+          <li><strong>DNS 污染</strong>：你查 google.com 在哪，它抢先塞给你一个错误的 IP。</li>
+          <li><strong>封 IP</strong>：发往某些 IP 的包直接丢掉。</li>
+          <li><strong>看 SNI 和流量特征</strong>：信封外写着被禁的名字，或者包裹"长得像代理"，就切断连接。</li>
+        </ul>
+
+        <h3>代理就是请人跑腿</h3>
+        <p>你不直接去目标网站，而是把请求交给一个在境外的帮手。帮手替你去取，再把结果交给你。审查系统只看到你在和这个帮手通信。</p>
+        <p>关键在于<strong>伪装</strong>。如果你和帮手之间的通信一看就是代理，帮手的 IP 很快就会被封。各种代理协议（VLESS、Trojan、Shadowsocks……）和伪装技术（REALITY）的区别，主要就在于怎么让这段通信看起来像普通上网。</p>
+
+        <dl class="defs">
+          <div><dt>节点</dt><dd>一个能用的帮手：一台服务器，加上连接它需要的全部参数。</dd></div>
+          <div><dt>机场 / 自建</dt><dd>机场是别人运营、卖给很多人用的节点服务。自建是自己租 VPS 搭的，只有自己用。</dd></div>
+          <div><dt>客户端</dt><dd>用户这边负责打包的软件，比如电脑上的 <strong>v2rayN</strong>、iPhone 上的 <strong>Shadowrocket</strong>。</dd></div>
+          <div><dt>服务端</dt><dd>VPS 上负责拆包的软件，常见的是 <strong>Xray</strong>，常用网页面板 <strong>3x-ui</strong> 来管理。</dd></div>
+        </dl>
+      </section>
+
+      <!-- ============ 5 ============ -->
+      <section id="ch5">
+        <p class="ch">第 5 章</p>
+        <h2>电脑上的 v2rayN 在做什么</h2>
+
+        <h3>外壳和内核</h3>
+        <p>v2rayN 本身只是一个"遥控器"（图形界面），真正处理流量的是它调用的<strong>内核</strong>。开着 TUN 时，任务管理器里能看到三个进程：</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>进程</th><th>角色</th><th>负责什么</th></tr></thead>
+            <tbody>
+              <tr><td><code>v2rayN.exe</code></td><td>遥控器</td><td>界面、保存设置、启动和停止内核</td></tr>
+              <tr><td><code>xray.exe</code></td><td>打包员</td><td>按 VLESS 协议加密、伪装，和你的 VPS 通信</td></tr>
+              <tr><td><code>sing-box.exe</code></td><td>总闸</td><td>开 TUN 模式时，接住整台电脑的流量</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>入站、路由、出站</h3>
+        <p>每个内核内部都像一个快递分拣站：</p>
+        <dl class="defs">
+          <div><dt>入站 <span class="like">收件窗口</span></dt><dd>包裹从这里进来。v2rayN 默认在 <code>127.0.0.1:10808</code> 开一个窗口，HTTP 和 SOCKS 两种格式都收。</dd></div>
+          <div><dt>路由 <span class="like">分拣员</span></dt><dd>按规则逐条比对，决定每个包裹从哪个出口走。</dd></div>
+          <div><dt>出站 <span class="like">发货口</span></dt><dd>三个口：<strong>proxy</strong> 寄给 VPS，<strong>direct</strong> 直接送不绕路，<strong>block</strong> 直接扔掉。</dd></div>
+          <div><dt>DNS 分流</dt><dd>v2rayN 的默认配置里，国内域名问腾讯的 <code>119.29.29.29</code>，快且就近；国外域名经过代理去问 Cloudflare 的加密 DNS，防污染。</dd></div>
+        </dl>
+
+        <h3>系统代理和 TUN，差在哪</h3>
+        <dl class="defs">
+          <div><dt>系统代理 <span class="like">门口贴告示</span></dt><dd>在 Windows 设置里写上"要上网的请走 <code>127.0.0.1:10808</code>"。浏览器会照做，但很多程序不看告示（游戏、部分通话软件、命令行工具）。而且告示只管 <span class="tcp-t">TCP</span>，<span class="udp-t">UDP</span> 根本不归它管。</dd></div>
+          <div><dt>TUN 模式 <span class="like">出入口装闸机</span></dt><dd>装一块虚拟网卡（v2rayN 里叫 <code>singbox_tun</code>），设成电脑的默认出口。所有程序的所有流量，TCP 和 UDP，都先经过它。需要管理员权限才能开启。</dd></div>
+        </dl>
+
+        <h3>系统代理和 TUN 同时开着时的完整链路</h3>
+        <p>两者可以同时开，不冲突：看告示的程序直接去 10808，不看告示的被 TUN 接住，最后汇到同一个地方。</p>
+        <ol class="chain">
+          <li><div><b>某个程序发出请求</b><span>浏览器、游戏、通话软件……</span></div></li>
+          <li><div><b>TUN 虚拟网卡接住，交给 sing-box</b><span>sing-box 按规则做第一次分拣（国内直连 / 拦截 / 交给代理）</span></div></li>
+          <li><div><b>交给 <code>127.0.0.1:10808</code> 的 Xray</b><span>看系统代理告示的程序直接到这一步</span></div></li>
+          <li><div><b>Xray 第二次分拣，加密打包</b><span>VLESS 协议 + REALITY 伪装</span></div></li>
+          <li><div><b>穿过跨境出口，到你的 VPS</b><span>VPS 上的 Xray 拆包</span></div></li>
+          <li><div><b>VPS 替你访问目标网站</b><span>对网站来说，访问它的是 VPS 的 IP</span></div></li>
+        </ol>
+
+        <h3>分拣规则：「绕过大陆」</h3>
+        <p>以 v2rayN 自带的规则集「V4-绕过大陆(Whitelist)」为例，规则<strong>从上往下</strong>逐条比对，命中第一条就停：</p>
+        <ol class="rules">
+          <li class="hot"><span>UDP 443（QUIC）</span><span class="tag bad">拦截</span></li>
+          <li><span>Google 相关域名</span><span class="tag tcp">代理</span></li>
+          <li><span>内网地址（192.168.x.x 等）</span><span class="tag ok">直连</span></li>
+          <li><span>国内 DNS 服务器</span><span class="tag ok">直连</span></li>
+          <li><span>国内 IP（geoip:cn）</span><span class="tag ok">直连</span></li>
+          <li><span>国内网站（geosite:cn）</span><span class="tag ok">直连</span></li>
+          <li><span>以上都不是（兜底）</span><span class="tag tcp">代理</span></li>
+        </ol>
+        <p><strong>geosite</strong> 和 <strong>geoip</strong> 是两本"地址簿"：geosite 按域名分类（哪些是国内网站、哪些属于 Google），geoip 按 IP 分类（哪些 IP 在中国）。地址簿可以在 v2rayN 里更新。</p>
+
+        <div class="lab" id="sim">
+          <div class="lab-head"><span class="lab-tag">动手试试</span><h3>分拣员模拟器</h3></div>
+          <p>先选你的上网方式，再选一件事，看这个包裹一路怎么走。</p>
+          <div class="lab-row">
+            <span>上网方式</span>
+            <div class="seg" role="group" aria-label="上网方式">
+              <button type="button" data-mode="sys" aria-pressed="false">只开系统代理</button>
+              <button type="button" data-mode="tun" aria-pressed="true">系统代理 + TUN</button>
+            </div>
+          </div>
+          <div class="lab-row">
+            <span>要做的事</span>
+            <div class="chips" role="group" aria-label="要做的事" id="simChips"></div>
+          </div>
+          <ol class="path" id="simPath" aria-live="polite"></ol>
+          <div class="verdict" id="simVerdict"></div>
+        </div>
+      </section>
+
+      <!-- ============ 6 ============ -->
+      <section id="ch6">
+        <p class="ch">第 6 章</p>
+        <h2>检测工具说"UDP 出不去，QUIC 被挡"，是怎么回事</h2>
+        <p>有的网络检测工具会提示："UDP 出不去，QUIC 被挡：视频通话、游戏和 HTTP/3 会退回 TCP，或者干脆连不上。"在一台开着 v2rayN（系统代理 + TUN，规则集「绕过大陆」）、用 VLESS + REALITY 节点的电脑上实际测一遍，结果是这样：</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>测试</th><th>送法</th><th>结果</th></tr></thead>
+            <tbody>
+              <tr><td>问 Google 的 STUN 服务器"我的 IP 是多少"</td><td><span class="tag udp">UDP 19302</span></td><td><span class="tag ok">通</span> 回答的是 VPS 的 IP</td></tr>
+              <tr><td>问 Cloudflare 的 STUN 服务器</td><td><span class="tag udp">UDP 3478</span></td><td><span class="tag ok">通</span> 同样走的代理</td></tr>
+              <tr><td>向 www.google.com 发 QUIC 包</td><td><span class="tag udp">UDP 443</span></td><td><span class="tag bad">无回应</span></td></tr>
+              <tr><td>向 cloudflare.com 发 QUIC 包</td><td><span class="tag udp">UDP 443</span></td><td><span class="tag bad">无回应</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>结论：<strong>UDP 是通的，只有 UDP 443 被拦。</strong>原因就是上一章规则表的第 1 条，在 v2rayN 里叫「阻断udp443」。检测工具拿 QUIC 代表 UDP 来测，所以说成了"UDP 出不去"，这个说法不准确。</p>
+
+        <h3>v2rayN 为什么默认拦掉 QUIC</h3>
+        <p>VLESS + REALITY 这类节点走的是 TCP。QUIC 想经过代理，就得先被装进 TCP 隧道，好比把明信片塞进挂号信里寄。TCP 的"丢了重发"会打乱 QUIC 自己的调速和重发，结果常常比直接用 TCP 还慢。干脆拦掉，浏览器立刻改用 TCP，反而更稳。</p>
+
+        <h3>要不要改</h3>
+        <p>一般不用。网页、视频都正常，普通 UDP（通话、游戏常用的端口）也通。只有某个程序非得用 UDP 443 才能连上时，再考虑关掉这条规则：</p>
+        <ol class="steps">
+          <li>打开 v2rayN 的「设置 → 路由设置」。</li>
+          <li>双击「V4-绕过大陆(Whitelist)」。</li>
+          <li>找到「阻断udp443」，取消勾选「启用」，点确定。</li>
+          <li>v2rayN 会重载内核，代理会断一两秒，挑个不碍事的时候自己操作。</li>
+        </ol>
+      </section>
+
+      <!-- ============ 7 ============ -->
+      <section id="ch7">
+        <p class="ch">第 7 章</p>
+        <h2>VPS：服务器那头有什么</h2>
+        <p><strong>VPS</strong>（虚拟专用服务器）是在海外机房租的一台"云电脑"：24 小时开机，有固定的公网 IP，装的是 Linux 系统（常见 Ubuntu、Debian）。它一般没有图形界面，全靠敲命令操作，按月付费。</p>
+
+        <h3>怎么控制它</h3>
+        <dl class="defs">
+          <div><dt>SSH <span class="like">远程命令行</span></dt><dd>一种加密的远程登录方式，默认走 TCP 22 端口。你在这头敲的命令，都在 VPS 上执行。</dd></div>
+          <div><dt>Xshell</dt><dd>Windows 上常用的 SSH 客户端。用它打开的那个黑色窗口，就是 VPS 的命令行。</dd></div>
+          <div><dt>密码登录 / 密钥登录</dt><dd>密码像暗号，别人可以不停地猜。密钥是一对文件：<strong>公钥</strong>放在服务器上，像一把锁；<strong>私钥</strong>留在你电脑里，像唯一的钥匙。只认钥匙的门，猜不开。</dd></div>
+          <div><dt>3x-ui 面板</dt><dd>装在 VPS 上的网页版管理后台，用来添加、修改节点，看流量。它背后管理的就是 Xray。面板本身也是一个入口，所以要有强密码、随机路径和两步验证（动态码）。</dd></div>
+        </dl>
+        <div class="aside">
+          <span class="lbl">私钥丢了怎么办</span>
+          <p>只认密钥的服务器，私钥丢了就从 Xshell 登不上了。这时可以去 VPS 商家的网页后台，用"VNC 控制台"或"救援模式"登录，重新放一把公钥。私钥文件建议备份一份到安全的地方，但不要发给任何人。</p>
+        </div>
+
+        <h3>服务器上的几层防护</h3>
+        <p>一台自建 VPS 常见的几层防护，从外到内：</p>
+        <ol class="layers">
+          <li><b>防火墙（ufw）</b><span>只放行用得到的端口（SSH、节点端口），其余一律关上。</span></li>
+          <li><b>fail2ban</b><span>发现同一个 IP 反复登录失败，就自动把它拉黑一段时间。</span></li>
+          <li><b>SSH 只允许密钥登录</b><span>关掉密码登录，猜密码的机器人就没了用武之地。</span></li>
+          <li><b>面板加固</b><span>强密码、非默认路径、两步验证动态码。</span></li>
+          <li><b>自动安全更新</b><span>系统漏洞的补丁自动打上，不用你记着。</span></li>
+        </ol>
+
+        <h3>BBR：让跨国线路跑得更快</h3>
+        <p>BBR 是 Google 做的一种 TCP 调速方法（叫"拥塞控制算法"）。跨国线路经常丢包，老办法一遇到丢包就大幅减速；BBR 按实际带宽和延迟来调速，跨国传输通常快不少。开启之后不用管它。</p>
+
+        <h3>线路、延迟和丢包</h3>
+        <dl class="defs">
+          <div><dt>延迟（ping）</dt><dd>一个包一来一回要多少毫秒（ms）。国内到日本、新加坡一般几十毫秒，到美国通常一百多到两百多毫秒。</dd></div>
+          <div><dt>丢包</dt><dd>包在路上丢掉的比例。晚上高峰期丢包变多，就会卡、会断。</dd></div>
+          <div><dt>去程 / 回程</dt><dd>你到 VPS 和 VPS 到你，可能走不同的路。看视频、下载主要靠回程。</dd></div>
+          <div><dt>优化线路</dt><dd>电信 CN2 GIA、联通 9929、移动 CMIN2 等是运营商的高质量国际线路，晚高峰更稳，价格也更高。</dd></div>
+        </dl>
+
+        <h3>IP 被封是什么样子</h3>
+        <p>如果你和 VPS 的通信被认出来，审查系统可能封掉 VPS 的 IP 或某个端口。典型表现是：国内连不上 VPS，但从国外测它一切正常。处理办法有换端口、换 IP（很多商家可以付费更换）、换协议。</p>
+      </section>
+
+      <!-- ============ 8 ============ -->
+      <section id="ch8">
+        <p class="ch">第 8 章</p>
+        <h2>拆开一条节点链接：VLESS + REALITY + Vision</h2>
+        <p>导入 v2rayN、Shadowrocket 的那串 <code>vless://…</code>，其实是把所有连接参数压成了一行。下面是一条<strong>示例</strong>链接（不是真实节点），点任意一段看解释。红色下划线的部分最敏感。</p>
+
+        <div class="lab" id="anat">
+          <div class="lab-head"><span class="lab-tag">动手试试</span><h3>节点链接解剖</h3></div>
+          <div class="link" id="linkBox"></div>
+          <div class="part-detail" id="partDetail" aria-live="polite"></div>
+        </div>
+
+        <h3>REALITY 是怎么骗过检查的</h3>
+        <ol class="steps">
+          <li>你的客户端打招呼时说"我要找 www.microsoft.com"（SNI），同时在招呼里悄悄夹带一个暗号。暗号是用公钥算出来的，只有你的服务器能验证。</li>
+          <li>VPS 检查暗号。对得上，就接待你，开始代理；对不上（比如审查系统主动来试探），就把连接原样转给真正的微软网站，对方拿到的是货真价实的微软证书。</li>
+          <li>所以在外人看来，你的 VPS 就像在正常访问一个大网站。你不需要买域名，也不需要申请证书。</li>
+        </ol>
+        <p>伪装目标（SNI）一般选境外的大网站，要求它在国内能正常访问、支持 TLS 1.3。服务器和客户端两边填的必须一致。</p>
+
+        <h3>常见代理协议对比</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>协议</th><th>送法</th><th>特点</th></tr></thead>
+            <tbody>
+              <tr><td><strong>VLESS + REALITY</strong></td><td><span class="tag tcp">TCP</span></td><td>不需要域名，伪装好，是目前自建最常见的方案之一。</td></tr>
+              <tr><td>VMess</td><td><span class="tag tcp">TCP</span></td><td>V2Ray 的老协议，自带加密。要求两端时钟误差在 90 秒以内。</td></tr>
+              <tr><td>Trojan</td><td><span class="tag tcp">TCP</span></td><td>伪装成 HTTPS 网站，需要自己的域名和证书。</td></tr>
+              <tr><td>Shadowsocks</td><td><span class="tag tcp">TCP</span> <span class="tag udp">UDP</span></td><td>老牌、轻量。新版本（2022）更安全，但特征相对容易被识别。</td></tr>
+              <tr><td>Hysteria2 / TUIC</td><td><span class="tag udp">UDP</span></td><td>基于 QUIC，在丢包严重的线路上速度快。有的运营商会对 UDP 限速。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ 9 ============ -->
+      <section id="ch9">
+        <p class="ch">第 9 章</p>
+        <h2>藏住真实 IP：泄露、指纹，以及代理做不到的事</h2>
+        <p>开着代理时，网站看到的应该是你 VPS 的 IP。但真实 IP 还可能从几条小路漏出去；而且网站就算不看 IP，也有别的办法认出你。这一章讲这两件事。</p>
+
+        <h3>先分清两个 IP</h3>
+        <dl class="defs">
+          <div><dt>真实 IP</dt><dd>家庭宽带、学校或公司网络分配的公网 IP。它能定位到城市和运营商；这些网络一般都是实名的，所以它能对应到你本人。</dd></div>
+          <div><dt>出口 IP <span class="like">也叫落地 IP</span></dt><dd>网站通过代理看到的 IP，也就是你 VPS 的 IP。"藏住真实 IP"，就是让所有流量都只露出这个 IP。</dd></div>
+        </dl>
+
+        <h3>谁能看到什么</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>谁</th><th>能看到</th><th>看不到</th></tr></thead>
+            <tbody>
+              <tr><td>你访问的网站</td><td>VPS 的 IP；你的浏览器指纹；你登录的账号和 Cookie</td><td>你的真实 IP（前提是没有泄露）</td></tr>
+              <tr><td>本地网络（运营商、学校、公司）和审查系统</td><td>你在和一个海外 IP 通信；流量多大、什么时间；伪装用的 SNI</td><td>你实际访问了哪些网站，内容是什么</td></tr>
+              <tr><td>VPS 商家</td><td>你的真实 IP（你每天都连它）；注册和付款信息；VPS 往外连了哪些地址</td><td>HTTPS 加密的内容</td></tr>
+              <tr><td>VPS 上的 Xray / 3x-ui</td><td>如果开着访问日志，会记下访问过的域名</td><td>HTTPS 加密的内容</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="aside">
+          <span class="lbl">代理不等于匿名</span>
+          <p>代理解决两件事：能打开被封的网站，以及网站看不到你本地的 IP。它不保证"没人知道是你"。VPS 是用你的账号和付款方式买的；自建节点的出口 IP 只有你一个人在用，你在各个网站上的活动都能通过这个 IP 串起来；登录了账号，网站当然知道是你。</p>
+        </div>
+
+        <h3>四种常见的泄露</h3>
+        <div class="alert warn">
+          <b>最容易被忽略的两件事</b>
+          一是 v2rayN 里的 <strong>Tun 开关被关上了</strong>，只剩系统代理在工作，自己却没发现；二是所在的网络（很多校园网和家庭宽带）分配了<strong>公网 IPv6 地址</strong>，而代理只接管了 IPv4。下面的泄露里，有几种正好对应这两点。
+        </div>
+
+        <div class="leak">
+          <h4>1. DNS 泄露</h4>
+          <dl>
+            <dt>是什么</dt><dd>网页本身走了代理，"查域名"这一步却直接问了本地的 DNS（比如运营商或学校的 DNS）。这样本地网络就知道你要去哪些网站。</dd>
+            <dt>什么时候发生</dt><dd>不看系统代理告示的程序，会用系统设置的 DNS 查询。Windows 还有个老习惯：同时向所有网卡的 DNS 发查询，谁先回答用谁的。</dd>
+            <dt>v2rayN 的情况</dt><dd>浏览器走系统代理时，域名原样交给 Xray，由代理那头去解析，不经过本地 DNS。TUN 开着时，sing-box 会接住所有 53 端口的查询；如果 Tun 设置里开了"严格路由"（strict_route），它还会加防火墙规则，堵住 Windows 向其他网卡乱发查询。TUN 关着时，其他程序的查询都交给本地网络的 DNS。</dd>
+            <dt>怎么查</dt><dd>打开 <a href="https://browserleaks.com/dns" target="_blank" rel="noopener">browserleaks.com/dns</a>。结果里应该只有 Cloudflare 这类境外 DNS；出现你学校或运营商的名字，就是泄露。国内网站的域名本来就交给 119.29.29.29 直接查询，这是规则有意安排的，不算泄露。</dd>
+          </dl>
+        </div>
+
+        <div class="leak">
+          <h4>2. WebRTC 泄露</h4>
+          <dl>
+            <dt>是什么</dt><dd>WebRTC 是浏览器里做音视频通话的技术。为了打通连接，它会用 STUN（第 6 章测试用的那个）查出你的公网 IP，网页里的脚本可以读到结果。</dd>
+            <dt>什么时候发生</dt><dd>STUN 走 UDP，系统代理管不了 UDP。只开系统代理时，网页很可能通过 WebRTC 拿到你的真实 IP。TUN 开着时，IPv4 的 STUN 会被接住走代理，查到的是 VPS 的 IP，第 6 章的测试就是这样。</dd>
+            <dt>怎么防</dt><dd>保持 TUN 打开。Chrome 或 Edge 可以装 Google 官方的 WebRTC Network Limiter 扩展，选"只通过代理"的那一项；Firefox 可以在 <code>about:config</code> 里把 <code>media.peerconnection.enabled</code> 改成 false，代价是网页里的视频通话用不了。</dd>
+            <dt>怎么查</dt><dd>打开 <a href="https://browserleaks.com/webrtc" target="_blank" rel="noopener">browserleaks.com/webrtc</a>，看 Public IP 那一栏。</dd>
+          </dl>
+        </div>
+
+        <div class="leak">
+          <h4>3. IPv6 泄露</h4>
+          <dl>
+            <dt>是什么</dt><dd>很多网络同时有 IPv4 和 IPv6 两套地址。如果代理只接管 IPv4，访问支持 IPv6 的网站时，流量可能直接从 IPv6 出去，露出你真实的 IPv6 地址。</dd>
+            <dt>容易出问题的情况</dt><dd>很多校园网和家庭宽带都会分配公网 IPv6。如果 v2rayN 的 Tun 设置里"启用 IPv6 地址"是关着的，TUN 就只接管 IPv4。这时就算 TUN 开着，不走系统代理的程序发出的 IPv6 流量也会绕过它，直接从本地网络出去。浏览器走系统代理时不受影响，但 WebRTC 走的是 IPv6 时同样会漏。</dd>
+            <dt>怎么防</dt><dd>二选一，都需要你自己操作，改的时候网络会短暂断开：在 v2rayN 的 Tun 模式设置里打开"启用 IPv6 地址"，让 TUN 把 IPv6 也接住（如果 VPS 本身没有 IPv6，这些连接会失败，程序一般会自动改用 IPv4）；或者在 Windows 的 WLAN 网卡属性里取消勾选 IPv6，少数只走 IPv6 的服务会因此用不了。</dd>
+            <dt>怎么查</dt><dd>打开 <a href="https://test-ipv6.com" target="_blank" rel="noopener">test-ipv6.com</a>。如果它显示了 IPv6 地址，而且这个地址属于你本地的网络而不是 VPS，就是泄露。</dd>
+          </dl>
+        </div>
+
+        <div class="leak">
+          <h4>4. 程序绕过代理，或代理意外断开</h4>
+          <dl>
+            <dt>是什么</dt><dd>只开系统代理时，不看告示的程序一直在用真实 IP 上网。另外，v2rayN 崩溃、被关掉，或者 Tun 开关被关上时，电脑会直接用真实网络，不会提醒你。</dd>
+            <dt>怎么发现</dt><dd>任务管理器里没有 sing-box.exe，或者 v2rayN 主界面底部的"启用 Tun"没打开，就说明 TUN 没在工作。</dd>
+            <dt>怎么防</dt><dd>在 v2rayN 主界面底部重新打开"启用 Tun"（需要以管理员身份运行 v2rayN），打开时网络会短暂切换一下。做对 IP 敏感的事之前，先去 IP 检测网站看一眼出口 IP。</dd>
+          </dl>
+        </div>
+
+        <h3>IP 本身也有"身份"</h3>
+        <p>网站可以查 IP 数据库，知道一个 IP 属于哪家公司、是什么类型。自建 VPS 用的一般是<strong>机房 IP</strong>（数据中心 IP），一查就知道是云服务器。有些网站（流媒体、部分 AI 服务、银行）对机房 IP 更严格：多弹验证码、限制部分内容，个别会直接拒绝。商家宣传的"住宅 IP""原生 IP"，指的是看起来像普通家庭宽带、或者登记在当地的 IP。</p>
+
+        <h3>网站不看 IP 也能认出你：浏览器指纹</h3>
+        <p>网站可以用脚本收集你浏览器和电脑的一大堆小特征：屏幕尺寸、系统和浏览器版本、时区、语言、显卡型号、装了哪些字体、画图时像素的细微差别……单看每一项都很普通，组合起来却往往独一无二，这就叫<strong>浏览器指纹</strong>。换 IP、清 Cookie 都改变不了它。</p>
+
+        <div class="lab" id="fpLab">
+          <div class="lab-head"><span class="lab-tag">动手试试</span><h3>你的浏览器正在说什么</h3></div>
+          <p>下面是这个页面刚刚在你的浏览器里读到的东西。它们只在你这里显示，没有发送到任何地方；但任何网站都能用同样的方法读到，不需要你点"允许"。</p>
+          <div class="tbl fp">
+            <table>
+              <thead><tr><th>特征</th><th>你的值</th><th>网站能拿它做什么</th></tr></thead>
+              <tbody id="fpBody"><tr><td colspan="3">正在读取……</td></tr></tbody>
+            </table>
+          </div>
+          <div class="verdict warn" id="fpNote"></div>
+        </div>
+
+        <h3>更直接的认人办法：Cookie 和账号</h3>
+        <p>网站最常用的认人办法，其实是 <strong>Cookie</strong>（网站存在你浏览器里的小纸条）和你登录的账号。只要登录了，换什么 IP 网站都知道是你。<strong>无痕窗口</strong>关闭后会清掉这次的 Cookie 和记录，但它不隐藏 IP，也不改变指纹。</p>
+
+        <h3>怎么减少指纹</h3>
+        <ul>
+          <li>目标是"和大家一样"，而不是与众不同。装一堆插件、改冷门设置，反而让你更容易被认出来。</li>
+          <li>Tor Browser 和 Mullvad Browser 让所有用户的指纹尽量一模一样，连窗口大小都按固定档位来。</li>
+          <li>Brave 浏览器默认会给 Canvas 等指纹加随机干扰；Firefox 有"抵抗指纹"的开关（<code>about:config</code> 里的 <code>privacy.resistFingerprinting</code>），开了以后时区会显示成 UTC，部分网站可能显示异常。</li>
+          <li>时区、语言和 IP 对不上也是线索：IP 在国外，时区却是北京时间、语言是中文。普通上网不用在意。</li>
+        </ul>
+
+        <h3>指纹浏览器是什么</h3>
+        <p>指纹浏览器（也叫反检测浏览器）能开出很多个互相隔离的"浏览器环境"。每个环境有自己伪造的一套指纹、独立的 Cookie，通常还绑定一个单独的代理 IP。在网站看来，每个环境都像一台不同的电脑。它主要用在跨境电商、社交媒体运营这类要同时管理很多账号的场景。</p>
+        <ul>
+          <li>它解决的是"让几个账号看起来像不同的人"，并不能让你匿名。日常上网用不着它。</li>
+          <li>大多是商业闭源软件，你所有账号的登录状态都存在它那里，很多还会同步到它的服务器，等于把这些账号的钥匙交给了它。这类软件出过客户端或插件被入侵、用户加密货币钱包被盗的事故。</li>
+          <li>很多平台的用户协议禁止一人多号，用它批量开号、养号，可能导致封号。</li>
+          <li>伪造得不自洽（比如自称 Mac，显卡却是 Windows 电脑的型号）反而更显眼。</li>
+        </ul>
+
+        <h3>真的需要匿名时：Tor</h3>
+        <p>Tor 会把你的流量经过三台志愿者服务器层层转发。每一台只知道上一站和下一站，没有任何一方能同时知道"你是谁"和"你在访问什么"。代价是很慢，很多网站会弹验证码。在国内直接连不上 Tor 网络，可以在 Tor Browser 的连接设置里选择通过代理连接，类型选 SOCKS5，地址填 <code>127.0.0.1</code>，端口填 <code>10808</code>（v2rayN 的收件窗口）。这样 VPS 商家能看到你在用 Tor，但看不到你通过 Tor 访问了什么。</p>
+
+        <h3>自查清单</h3>
+        <p>开着代理，按下面几项逐个打开检测网站看一看。勾选状态只保存在你这台设备的浏览器里。</p>
+        <ul class="check" id="leakCheck">
+          <li><input type="checkbox" id="lc1"><label for="lc1">打开 <a href="https://browserleaks.com/ip" target="_blank" rel="noopener">browserleaks.com/ip</a> 或 <a href="https://ipinfo.io" target="_blank" rel="noopener">ipinfo.io</a>：显示的 IP 和国家应该是你 VPS 的。</label></li>
+          <li><input type="checkbox" id="lc2"><label for="lc2"><a href="https://browserleaks.com/dns" target="_blank" rel="noopener">browserleaks.com/dns</a>：列出的 DNS 服务器里不应该有你学校或运营商的名字。</label></li>
+          <li><input type="checkbox" id="lc3"><label for="lc3"><a href="https://browserleaks.com/webrtc" target="_blank" rel="noopener">browserleaks.com/webrtc</a>：Public IP 一栏不应该出现你真实的 IPv4 或 IPv6。</label></li>
+          <li><input type="checkbox" id="lc4"><label for="lc4"><a href="https://test-ipv6.com" target="_blank" rel="noopener">test-ipv6.com</a>：显示的 IPv6 地址不应该属于你本地的网络。</label></li>
+          <li><input type="checkbox" id="lc5"><label for="lc5">v2rayN 在运行，主界面底部的"启用 Tun"是打开的。</label></li>
+          <li><input type="checkbox" id="lc6"><label for="lc6">选做：在 <a href="https://amiunique.org" target="_blank" rel="noopener">amiunique.org</a> 看看你的浏览器指纹有多独特。</label></li>
+        </ul>
+        <div class="check-foot"><span id="checkCount">已完成 0 / 6</span><button type="button" class="linkbtn" id="checkReset">清空勾选</button></div>
+        <p>检测网站自己也会看到你的 IP，这正是它们检测的原理。</p>
+      </section>
+
+      <!-- ============ 10 ============ -->
+      <section id="ch10">
+        <p class="ch">第 10 章</p>
+        <h2>安全守则与排错</h2>
+
+        <h3>这些东西不要给别人</h3>
+        <ul class="dont">
+          <li><b>节点链接 / 二维码</b><br>等于把服务器借给对方用</li>
+          <li><b>UUID</b><br>节点的账号密码</li>
+          <li><b>面板地址 + 账号 + 动态码</b><br>拿到就能改你的全部节点</li>
+          <li><b>SSH 私钥文件</b><br>拿到就能登录你的 VPS</li>
+          <li><b>VPS 商家后台账号</b><br>拿到就能重装、删除服务器</li>
+          <li><b>带以上信息的截图</b><br>发截图前先打码</li>
+        </ul>
+        <ul>
+          <li>面板和 VPS 后台的密码不要和其他网站重复。</li>
+          <li>网上的"一键脚本"只用来源可靠的（GitHub 上长期维护、使用者多的项目）。</li>
+          <li>隔一段时间看看 3x-ui 里的流量统计，有异常的大流量要警惕。</li>
+          <li>Shadowrocket 是付费 App，需要外区 Apple ID 从官方 App Store 下载，不要装来路不明的版本。</li>
+        </ul>
+
+        <h3>连不上时，按这个顺序查</h3>
+        <ol class="steps">
+          <li><strong>是不是只有一个网站打不开？</strong>是的话，多半是那个网站自己的问题，或者它被分到了直连。</li>
+          <li><strong>在 v2rayN 里测一下节点延迟。</strong>有数字说明节点通，问题在本机设置或规则；显示超时或 -1，接着往下查。</li>
+          <li><strong>国内网站能开吗？</strong>国内也打不开，就是你本身的网络断了（比如校园网掉线）。</li>
+          <li><strong>Xshell 能连上 VPS 吗？</strong>连不上，可能是 VPS 宕机、欠费或 IP 被封，去商家后台看状态；能连上，就到 3x-ui 首页看 Xray 是否在运行。</li>
+          <li><strong>判断 IP 是否被封。</strong>用国内的在线 ping 工具测 VPS 的 IP，再用国外的工具测。国内全部不通、国外正常，基本就是被封了。</li>
+          <li><strong>换个网络试试。</strong>开手机热点再连。校园网、公司网络有时会限制特定端口或协议。</li>
+        </ol>
+        <div class="aside">
+          <span class="lbl">"测速失败"不一定是节点坏了</span>
+          <p>v2rayN 的测速分两种：<strong>延迟测试</strong>只看能不能连上、多快回应；<strong>下载测速</strong>会真的去下载一个境外的测试文件。如果测试文件的地址本身挂了，下载测速也会显示失败，但你上网可能完全正常。以延迟测试和实际使用为准。</p>
+        </div>
+      </section>
+
+      <!-- ============ glossary ============ -->
+      <section id="words">
+        <p class="ch">附录</p>
+        <h2>术语表</h2>
+        <p>遇到看不懂的词，在这里搜。每条后面标着在哪一章讲过。</p>
+        <div class="gl-tools">
+          <label for="glq" class="mono" style="font-size:.8rem;color:var(--muted)">搜索</label>
+          <input id="glq" type="search" placeholder="比如：TUN、端口、REALITY" autocomplete="off">
+          <span class="gl-count" id="glCount"></span>
+        </div>
+        <dl class="gl" id="glList"></dl>
+        <p class="gl-empty" id="glEmpty" hidden>没有找到，换个词试试，比如只输入一个字。</p>
+      </section>
+
+      <p class="foot">文中的配置和测试以 v2rayN 自带的「绕过大陆」规则集为例。页面里的节点链接、IP 都是示例。</p>
+    </main>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(s, r){ return (r||document).querySelector(s); };
+  var $$ = function(s, r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+  /* ---------- 1. address dissector ---------- */
+  var ADDR = {
+    loop: { code:"127.0.0.1:10808", parts:[
+      ["127.0.0.1","特殊 IP","永远指“这台电脑自己”，包裹不出门。"],
+      ["10808","端口","v2rayN 在这个端口开着收件窗口。Windows 的系统代理设置里写的就是它。"]],
+      note:"合起来：把流量交给本机上的 v2rayN。" },
+    google: { code:"www.google.com:443", parts:[
+      ["www.google.com","域名","名字。电脑会先通过 DNS 把它查成 IP。"],
+      ["443","端口","HTTPS 的标准端口。浏览器打开 https:// 网址时，不写端口也默认用 443。"]],
+      note:"合起来：用加密网页的方式访问 Google。" },
+    router: { code:"192.168.1.1", parts:[
+      ["192.168.1.1","内网 IP","只在你家或宿舍的局域网里有效，通常就是路由器本身。"],
+      ["（没写）","端口","没写端口时，http:// 默认用 80，https:// 默认用 443。"]],
+      note:"合起来：打开路由器的管理后台。这种地址不需要也不应该走代理。" },
+    ssh: { code:"VPS的公网IP:22", parts:[
+      ["VPS 的公网 IP","公网 IP","全世界都能找到的门牌号，在 VPS 商家后台能看到。"],
+      ["22","端口","SSH 的默认端口，Xshell 连的就是这里。为了安全，有人会把它改成别的号码。"]],
+      note:"合起来：远程登录你的服务器。" }
+  };
+  function showAddr(k){
+    var a = ADDR[k];
+    $("#addrCode").textContent = a.code;
+    $("#addrParts").innerHTML = a.parts.map(function(p){
+      return "<li><b>"+esc(p[0])+"<em>"+esc(p[1])+"</em></b><span>"+esc(p[2])+"</span></li>";
+    }).join("");
+    $("#addrNote").textContent = a.note;
+    $$("#addrLab [data-addr]").forEach(function(b){ b.setAttribute("aria-pressed", String(b.dataset.addr===k)); });
+  }
+  $$("#addrLab [data-addr]").forEach(function(b){ b.addEventListener("click", function(){ showAddr(b.dataset.addr); }); });
+  showAddr("loop");
+
+  /* ---------- 5. routing simulator ---------- */
+  var SCEN = [
+    { id:"bili",   label:"用浏览器看 B 站" },
+    { id:"google", label:"用浏览器打开 Google" },
+    { id:"quic",   label:"Chrome 用 HTTP/3 开 YouTube" },
+    { id:"call",   label:"外网软件语音通话" },
+    { id:"router", label:"打开路由器后台" },
+    { id:"game",   label:"不看告示的程序连国外" }
+  ];
+  // step: [type, who, what]
+  var SIM = {
+    sys: {
+      bili: { steps:[
+        ["app","程序","浏览器要访问 bilibili.com（TCP 443）。"],
+        ["gate","系统代理","浏览器看到告示，把请求交给 127.0.0.1:10808 的 Xray。"],
+        ["rule","Xray 分拣","命中“国内网站（geosite:cn）→ 直连”。"],
+        ["direct","出口","Xray 直接连 B 站，不经过 VPS。"]],
+        v:["ok","能打开","国内网站直连，速度和不开代理一样。"] },
+      google: { steps:[
+        ["app","程序","浏览器要访问 google.com（TCP 443）。"],
+        ["gate","系统代理","浏览器看到告示，交给 Xray。"],
+        ["rule","Xray 分拣","命中“Google 相关域名 → 代理”。"],
+        ["proxy","出口","VLESS + REALITY 加密，寄给你的 VPS，VPS 替你访问 Google。"]],
+        v:["ok","能打开","这就是代理最基本的用法。"] },
+      quic: { steps:[
+        ["app","程序","Chrome 先试 HTTP/3，发出 QUIC 包（UDP 443）。"],
+        ["gate","系统代理","告示只管 TCP，这个 UDP 包没人接手。"],
+        ["direct","出口","包从你的网卡直接出去。"],
+        ["block","跨境出口","发往 Google 的 IP 被封，包被丢掉，没有回音。"]],
+        v:["warn","自动绕开","QUIC 失败后，Chrome 改用 TCP，走上面“打开 Google”那条路，页面照样能开。"] },
+      call: { steps:[
+        ["app","程序","通话软件发出语音数据（UDP，非 443 端口）。"],
+        ["gate","系统代理","告示不管 UDP，很多通话软件也根本不看告示。"],
+        ["direct","出口","数据直接从你的网卡出去。"],
+        ["block","跨境出口","如果这个服务在国内被封锁，数据到不了。"]],
+        v:["bad","不通","连不上或断断续续。要么开 TUN，要么在软件里单独设置代理。"] },
+      router: { steps:[
+        ["app","程序","浏览器要访问 192.168.1.1。"],
+        ["gate","系统代理","告示里写着“本地地址不走代理”，浏览器直接去。"],
+        ["direct","出口","在局域网里直接打开路由器后台。"]],
+        v:["ok","能打开","内网地址本来就不该绕到国外。"] },
+      game: { steps:[
+        ["app","程序","游戏客户端要连国外服务器，它不看系统代理告示。"],
+        ["direct","出口","数据直接从你的网卡出去。"],
+        ["block","跨境出口","如果目标被封锁或线路很差，就连不上、延迟高。"]],
+        v:["bad","不一定通","只开系统代理时，这类程序完全不受代理控制。"] }
+    },
+    tun: {
+      bili: { steps:[
+        ["app","程序","浏览器要访问 bilibili.com（TCP 443）。"],
+        ["gate","系统代理","浏览器看告示，直接交给 10808 的 Xray（不经过 TUN）。"],
+        ["rule","Xray 分拣","命中“国内网站（geosite:cn）→ 直连”。"],
+        ["direct","出口","Xray 直接连 B 站。"]],
+        v:["ok","能打开","和只开系统代理时一样。"] },
+      google: { steps:[
+        ["app","程序","浏览器要访问 google.com（TCP 443）。"],
+        ["gate","系统代理","浏览器看告示，交给 Xray。"],
+        ["rule","Xray 分拣","命中“Google 相关域名 → 代理”。"],
+        ["proxy","出口","加密后寄给 VPS，由 VPS 访问 Google。"]],
+        v:["ok","能打开","和只开系统代理时一样。"] },
+      quic: { steps:[
+        ["app","程序","Chrome 发出 QUIC 包（UDP 443）。"],
+        ["gate","TUN","告示不管 UDP，但 TUN 虚拟网卡把它接住，交给 sing-box。"],
+        ["rule","sing-box 分拣","命中第 1 条“UDP 443 → 拦截”。"],
+        ["block","出口","直接拒绝，根本不往外发。"]],
+        v:["warn","被拦，自动绕开","这就是检测工具说的“QUIC 被挡”。Chrome 立刻改用 TCP，页面正常打开。"] },
+      call: { steps:[
+        ["app","程序","通话软件发出语音数据（UDP，非 443 端口）。"],
+        ["gate","TUN","虚拟网卡接住，交给 sing-box。"],
+        ["rule","sing-box 分拣","不是 443、不是国内、不是内网，命中兜底规则“→ 代理”。"],
+        ["proxy","出口","交给 Xray，UDP 被装进 VLESS 隧道寄给 VPS，再由 VPS 发给通话服务器。"]],
+        v:["ok","能通","第 6 章的 STUN 测试走的就是这条路，查到的出口 IP 是 VPS 的 IP。"] },
+      router: { steps:[
+        ["app","程序","浏览器要访问 192.168.1.1。"],
+        ["gate","系统代理","告示写着本地地址不走代理，浏览器直接去。"],
+        ["direct","出口","在局域网里直接打开。就算被 TUN 接住，规则里“内网地址 → 直连”也会放行。"]],
+        v:["ok","能打开","内网地址始终直连。"] },
+      game: { steps:[
+        ["app","程序","游戏客户端连国外服务器，不看告示。"],
+        ["gate","TUN","不管看不看告示，流量都被虚拟网卡接住，交给 sing-box。"],
+        ["rule","sing-box 分拣","国外 IP，命中兜底规则“→ 代理”。"],
+        ["proxy","出口","交给 Xray 加密，经 VPS 连到游戏服务器。"]],
+        v:["ok","能通","这就是 TUN 的意义：不听话的程序也会被代理。"] }
+    }
+  };
+  var simMode = "tun", simScen = "quic";
+  var chipBox = $("#simChips");
+  chipBox.innerHTML = SCEN.map(function(s){
+    return '<button class="chip" type="button" data-scen="'+s.id+'" aria-pressed="false">'+esc(s.label)+'</button>';
+  }).join("");
+  function renderSim(){
+    var d = SIM[simMode][simScen];
+    $("#simPath").innerHTML = d.steps.map(function(st){
+      return '<li class="step '+st[0]+'"><span class="dot" aria-hidden="true"></span><div><span class="who">'+esc(st[1])+'</span><div class="what">'+esc(st[2])+'</div></div></li>';
+    }).join("");
+    var v = $("#simVerdict");
+    v.className = "verdict " + d.v[0];
+    v.innerHTML = "<b>结果：" + esc(d.v[1]) + "</b>" + esc(d.v[2]);
+    $$("#sim [data-mode]").forEach(function(b){ b.setAttribute("aria-pressed", String(b.dataset.mode===simMode)); });
+    $$("#sim [data-scen]").forEach(function(b){ b.setAttribute("aria-pressed", String(b.dataset.scen===simScen)); });
+  }
+  $$("#sim [data-mode]").forEach(function(b){ b.addEventListener("click", function(){ simMode = b.dataset.mode; renderSim(); }); });
+  $$("#sim [data-scen]").forEach(function(b){ b.addEventListener("click", function(){ simScen = b.dataset.scen; renderSim(); }); });
+  renderSim();
+
+  /* ---------- 8. vless link anatomy ---------- */
+  var SENS = { secret:["bad","机密"], semi:["warn","别外传"], pub:["ok","可公开"] };
+  var PARTS = [
+    { t:"vless://", n:"协议名", s:"pub", d:"告诉客户端“这是一个 VLESS 节点”。其他常见的开头还有 vmess://、trojan://、ss://、hysteria2://。" },
+    { sep:"" },
+    { t:"1f2e3d4c-5b6a-4789-8abc-0123456789ab", n:"UUID（用户 ID）", s:"secret", d:"相当于你的账号加密码。服务器只接待它认识的 UUID，别人拿到它就能用你的服务器上网。" },
+    { sep:"@" },
+    { t:"203.0.113.10", n:"服务器地址", s:"semi", d:"你 VPS 的公网 IP（这里是专门用于举例的地址）。泄露后别人就知道你的服务器在哪。" },
+    { sep:":" },
+    { t:"443", n:"端口", s:"pub", d:"VPS 上 Xray 守着的端口。443 最像普通网站，用别的端口也能工作，但防火墙必须放行它。" },
+    { sep:"?" },
+    { t:"encryption=none", n:"VLESS 自身加密", s:"pub", d:"VLESS 默认自己不加密，加密交给 REALITY。新版 Xray 加了可选的 VLESS Encryption：如果这里是一长串以 mlkem768x25519plus 开头的内容，说明多加了一层抗量子加密。" },
+    { sep:"&" },
+    { t:"security=reality", n:"安全层：REALITY", s:"pub", d:"用 REALITY 加密和伪装。后面的 sni、fp、pbk、sid 都是给它用的。" },
+    { sep:"&" },
+    { t:"sni=www.microsoft.com", n:"SNI（伪装目标）", s:"pub", d:"写在“信封外面”的网站名。审查系统看到的是你在访问这个大网站。必须和服务器上设置的目标网站一致。" },
+    { sep:"&" },
+    { t:"fp=chrome", n:"uTLS 指纹", s:"pub", d:"让 Xray 按 Chrome 浏览器的方式打招呼。每种软件打招呼的细节都不一样，模仿常见浏览器可以避免被一眼认出是代理软件。" },
+    { sep:"&" },
+    { t:"pbk=Zx9k…(公钥)", n:"REALITY 公钥", s:"semi", d:"和服务器上的私钥配成一对，客户端用它算出只有服务器能验证的暗号。私钥只存在服务器上，永远不会出现在链接里。" },
+    { sep:"&" },
+    { t:"sid=6ba85179", n:"Short ID", s:"semi", d:"额外的短口令。服务器上可以设多个，客户端填其中一个就行。" },
+    { sep:"&" },
+    { t:"flow=xtls-rprx-vision", n:"流控：Vision", s:"pub", d:"通过代理访问 HTTPS 网站时，会出现“加密里再套一层加密”（TLS 套 TLS），这个形态本身就是一种可以被识别的特征。Vision 会调整数据包来削弱它，顺便更省 CPU。" },
+    { sep:"&" },
+    { t:"type=tcp", n:"传输方式", s:"pub", d:"直接用 TCP 传输，新版 Xray 也写作 raw。其他选项如 ws、grpc、xhttp，一般用来配合 CDN。" },
+    { sep:"#" },
+    { t:"我的节点", n:"备注", s:"pub", d:"只是显示在客户端列表里的名字，随便起。" }
+  ];
+  var linkHtml = "";
+  PARTS.forEach(function(p, i){
+    if (p.sep !== undefined){ if (p.sep) linkHtml += '<span class="sep">'+esc(p.sep)+'</span>'; return; }
+    linkHtml += '<button type="button" class="part'+(p.s==="secret"?" secret":"")+'" data-i="'+i+'" aria-pressed="false">'+esc(p.t)+'</button>';
+  });
+  $("#linkBox").innerHTML = linkHtml;
+  function showPart(i){
+    var p = PARTS[i], s = SENS[p.s];
+    $("#partDetail").innerHTML = '<h4>'+esc(p.n)+' <span class="tag '+s[0]+'">'+s[1]+'</span></h4><p>'+esc(p.d)+'</p>';
+    $$("#linkBox .part").forEach(function(b){ b.setAttribute("aria-pressed", String(+b.dataset.i===i)); });
+  }
+  $$("#linkBox .part").forEach(function(b){ b.addEventListener("click", function(){ showPart(+b.dataset.i); }); });
+  showPart(2);
+
+  /* ---------- glossary ---------- */
+  var CH = { ch1:"第 1 章", ch2:"第 2 章", ch3:"第 3 章", ch4:"第 4 章", ch5:"第 5 章", ch6:"第 6 章", ch7:"第 7 章", ch8:"第 8 章", ch9:"第 9 章", ch10:"第 10 章" };
+  var GL = [
+    ["IP 地址","IP address","网络上的门牌号。每台联网设备都有，形如 104.16.249.249。","ch1"],
+    ["公网 IP","public IP","全世界都能找到的门牌号。VPS 都有一个固定的公网 IP。","ch1"],
+    ["内网 IP","private IP / 局域网","只在家里、学校、公司内部有效的地址，如 192.168.x.x、10.x.x.x。","ch1"],
+    ["127.0.0.1","localhost / 本机","永远指“这台电脑自己”。v2rayN 默认的收件窗口就开在 127.0.0.1:10808。","ch1"],
+    ["IPv6","","新一代 IP 地址，更长，如 2606:4700::1111。和 IPv4 是并行的两套门牌号。","ch1"],
+    ["端口","port","一台电脑上的房间号，范围 1–65535，不同程序守在不同端口。","ch1"],
+    ["域名","domain","好记的名字，如 www.google.com。连接前要先换成 IP。","ch1"],
+    ["DNS","","把域名查成 IP 的“通讯录”服务，通常走 UDP 53 端口。","ch1"],
+    ["DNS 污染","DNS poisoning","查域名时被半路塞了一个错误的 IP，导致连不上。","ch4"],
+    ["DoH","DNS over HTTPS","把 DNS 查询加密后通过 HTTPS 发送，路上的人看不到也改不了。v2rayN 默认用它查国外域名。","ch5"],
+    ["TCP","","可靠的送法：先握手，对方回执，丢了重发，按顺序到达。网页、SSH、VLESS 节点都用它。","ch2"],
+    ["UDP","","快速的送法：直接发出，不回执、不重发。通话、游戏、DNS、QUIC 用它。","ch2"],
+    ["三次握手","handshake","TCP 传数据前的三句招呼：在吗？在。好。","ch2"],
+    ["延迟","ping / latency","一个包一来一回要多少毫秒。越低越跟手。","ch7"],
+    ["丢包","packet loss","发出的包在路上丢掉的比例。丢包高就会卡、会断。","ch7"],
+    ["带宽","bandwidth","线路每秒最多能传多少数据，决定下载速度的上限。","ch7"],
+    ["HTTP","","浏览器和网站之间对话的格式。","ch3"],
+    ["HTTPS","","加了 TLS 加密的 HTTP。地址栏里的小锁就是它。","ch3"],
+    ["TLS","","加密层，把内容装进只有双方能拆开的信封。","ch3"],
+    ["证书","certificate","网站的身份证，由权威机构签发，证明“我真的是这个网站”。","ch3"],
+    ["SNI","Server Name Indication","加密开始前写在“信封外面”的网站名，路上的人看得到。","ch3"],
+    ["HTTP/3","","最新一代 HTTP，跑在 QUIC 上。","ch3"],
+    ["QUIC","","建在 UDP 上的新传输协议，自带加密，用 UDP 443。v2rayN 默认拦截它。","ch6"],
+    ["STUN","","视频通话用来查“我在公网上是哪个 IP”的小协议，走 UDP。第 6 章的测试用了它。","ch6"],
+    ["GFW","防火长城 / 墙","对跨境网络流量做审查和封锁的系统的俗称。","ch4"],
+    ["代理","proxy","替你转发流量的中间人：你 → 代理 → 网站。","ch4"],
+    ["节点","","一台能用的代理服务器，加上连接它所需的全部参数。","ch4"],
+    ["机场","","别人运营、卖给很多用户的代理服务。","ch4"],
+    ["自建","","自己租 VPS 搭的代理，只有自己用。","ch4"],
+    ["客户端 / 服务端","client / server","你这边负责打包的软件（v2rayN、Shadowrocket）/ VPS 上负责拆包的软件（Xray）。","ch4"],
+    ["订阅","subscription","一个网址，客户端定期从它拉取最新节点列表。机场常用，自建一般直接导入链接。","ch8"],
+    ["v2rayN","","Windows 上的代理客户端界面，自己不处理流量，调用内核来做。","ch5"],
+    ["内核","core","真正处理流量的程序，如 Xray、sing-box。","ch5"],
+    ["Xray","Xray-core","支持 VLESS、REALITY 等协议的代理内核。自建节点时，电脑和 VPS 上通常都在跑它。","ch5"],
+    ["sing-box","","另一个代理内核，v2rayN 用它来实现 TUN 模式。","ch5"],
+    ["Shadowrocket","小火箭","iPhone 上的付费代理客户端，需要外区 Apple ID 下载。","ch10"],
+    ["入站","inbound","内核的收件窗口，比如 v2rayN 在 127.0.0.1:10808 收件。","ch5"],
+    ["出站","outbound","内核的发货口：proxy（走代理）、direct（直连）、block（拦截）。","ch5"],
+    ["路由 / 分流","routing","按规则决定每个连接走哪个出站。","ch5"],
+    ["直连","direct","不经过代理，直接访问。国内网站一般直连。","ch5"],
+    ["系统代理","","Windows 里的一个设置，让“听话”的程序把 TCP 流量交给指定地址。管不了 UDP。","ch5"],
+    ["TUN 模式","虚拟网卡","装一块虚拟网卡，接管整台电脑的全部流量（含 UDP）。需要管理员权限。","ch5"],
+    ["geosite / geoip","规则集","两本地址簿：按域名 / 按 IP 把网站分成“国内”“Google”“内网”等类别。","ch5"],
+    ["绕过大陆","Whitelist","一套路由预设：国内直连，其余走代理。v2rayN 里很常用。","ch5"],
+    ["全局","Global","所有流量都走代理，连国内网站也绕一圈。","ch5"],
+    ["VPS","Virtual Private Server","在机房租的一台云电脑，24 小时在线，有公网 IP。","ch7"],
+    ["Linux","Ubuntu / Debian","VPS 上常用的操作系统，主要靠敲命令操作。","ch7"],
+    ["SSH","","加密的远程命令行，默认 TCP 22 端口。","ch7"],
+    ["Xshell","","Windows 上常用的 SSH 客户端，用来登录 VPS。","ch7"],
+    ["公钥 / 私钥","key pair","一对配套的密钥：公钥像锁，可以给出去；私钥像唯一的钥匙，绝不外传。","ch7"],
+    ["密钥登录","","用私钥文件登录 SSH，比密码安全得多。","ch7"],
+    ["3x-ui","面板","装在 VPS 上的网页管理后台，用来管理 Xray 的节点。","ch7"],
+    ["防火墙 / ufw","firewall","只放行指定端口的门禁。ufw 是 Ubuntu 上常用的防火墙工具。","ch7"],
+    ["fail2ban","","发现同一个 IP 反复登录失败，就自动拉黑它。","ch7"],
+    ["BBR","","一种 TCP 调速方法，让跨国、易丢包的线路跑得更快。","ch7"],
+    ["优化线路","CN2 GIA / 9929 / CMIN2","运营商的高质量国际线路，晚高峰更稳，价格更高。","ch7"],
+    ["去程 / 回程","","你到 VPS、VPS 到你，可能走不同的路。回程影响下载和看视频。","ch7"],
+    ["VLESS","","轻量代理协议，本身默认不加密，靠 REALITY 或 TLS 加密和伪装。","ch8"],
+    ["VMess","","V2Ray 的老协议，自带加密，要求两端时钟误差在 90 秒以内。","ch8"],
+    ["Trojan","","伪装成 HTTPS 网站的代理协议，需要域名和证书。","ch8"],
+    ["Shadowsocks","SS","老牌轻量代理协议，支持 TCP 和 UDP。","ch8"],
+    ["Hysteria2 / TUIC","","基于 QUIC（UDP）的代理协议，在丢包线路上速度快。","ch8"],
+    ["REALITY","","借用真实大网站身份的伪装技术，不需要自己的域名和证书。","ch8"],
+    ["Vision","xtls-rprx-vision / 流控","削弱“TLS 套 TLS”特征的流控方式，也更省性能。","ch8"],
+    ["uTLS 指纹","fp / fingerprint","模仿某个浏览器（如 Chrome）打招呼的方式，避免被认出是代理软件。","ch8"],
+    ["UUID","","一串 36 位的随机 ID，相当于节点的账号密码。","ch8"],
+    ["Short ID","sid","REALITY 里额外的短口令。","ch8"],
+    ["真实 IP","","家庭宽带、学校或公司网络分配的公网 IP，一般是实名的，能对应到你本人。","ch9"],
+    ["出口 IP","落地 IP","网站通过代理看到的 IP，也就是 VPS 的 IP。","ch9"],
+    ["DNS 泄露","DNS leak","网页走了代理，查域名却直接问了本地 DNS，让本地网络知道你要去哪。","ch9"],
+    ["WebRTC","","浏览器里做音视频通话的技术，会用 STUN 查你的公网 IP。","ch9"],
+    ["WebRTC 泄露","","网页通过 WebRTC 读到你的真实 IP。只开系统代理时最常见。","ch9"],
+    ["IPv6 泄露","","代理只接管 IPv4，IPv6 流量直接出去，露出你真实的 IPv6 地址。","ch9"],
+    ["严格路由","strict_route","sing-box 的 TUN 选项，会加防火墙规则，堵住 Windows 向其他网卡乱发 DNS 查询。","ch9"],
+    ["浏览器指纹","fingerprint","屏幕、时区、显卡、字体等特征组合成的“身份证”，不靠 IP 和 Cookie 也能认出你。","ch9"],
+    ["Canvas 指纹","","让浏览器画同一张图，不同电脑的像素有细微差别，算出的值可以用来认人。","ch9"],
+    ["指纹浏览器","反检测浏览器","给每个浏览器环境伪造独立指纹和 Cookie 的软件，主要用于多账号管理。","ch9"],
+    ["Cookie","","网站存在你浏览器里的小纸条，用来记住你是谁、有没有登录。","ch9"],
+    ["无痕模式","隐私窗口","关闭窗口后清掉这次的 Cookie 和记录，但不隐藏 IP，也不改变指纹。","ch9"],
+    ["机房 IP","数据中心 IP","云服务器的 IP。查 IP 数据库就知道，有些网站对它更严格。","ch9"],
+    ["Tor","洋葱路由","经过三台志愿者服务器层层转发的匿名网络。很慢，但没有一方能同时知道你是谁和你在看什么。","ch9"]
+  ];
+  var glList = $("#glList"), glEmpty = $("#glEmpty"), glCount = $("#glCount");
+  function renderGl(q){
+    q = (q||"").trim().toLowerCase();
+    var rows = GL.filter(function(g){ return !q || (g[0]+" "+g[1]+" "+g[2]).toLowerCase().indexOf(q) !== -1; });
+    glList.innerHTML = rows.map(function(g){
+      return '<div><dt>'+esc(g[0])+(g[1]?' <small>'+esc(g[1])+'</small>':'')+'</dt><dd>'+esc(g[2])+' <a href="#'+g[3]+'">'+CH[g[3]]+'</a></dd></div>';
+    }).join("");
+    glEmpty.hidden = rows.length > 0;
+    glCount.textContent = q ? ("找到 " + rows.length + " 个") : ("共 " + GL.length + " 个词");
+  }
+  $("#glq").addEventListener("input", function(e){ renderGl(e.target.value); });
+  renderGl("");
+
+  /* ---------- 9. fingerprint demo (local only, nothing is sent) ---------- */
+  function fnv(str){
+    var h = 0x811c9dc5;
+    for (var i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return ("0000000" + h.toString(16)).slice(-8);
+  }
+  function buildFp(){
+    var rows = [];
+    var tz = "读不到", off = -new Date().getTimezoneOffset() / 60;
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || tz; } catch(e){}
+    var offTxt = "UTC" + (off >= 0 ? "+" : "") + off;
+    rows.push(["时区", tz + "（" + offTxt + "）", "和 IP 所在地对比，判断你是不是在用代理"]);
+    var langs = (navigator.languages && navigator.languages.length) ? navigator.languages.join(", ") : (navigator.language || "读不到");
+    rows.push(["语言", langs, "缩小你所在的地区，也能和 IP 对比"]);
+    rows.push(["屏幕", screen.width + "×" + screen.height + "，缩放 " + (window.devicePixelRatio || 1) + " 倍，" + screen.colorDepth + " 位色", "笔记本、外接显示器、缩放比例的组合差别很大"]);
+    rows.push(["系统与浏览器", navigator.userAgent || "读不到", "版本号越新或越旧，越少见"]);
+    rows.push(["CPU 线程数", navigator.hardwareConcurrency ? String(navigator.hardwareConcurrency) : "读不到", "配合其他项缩小范围"]);
+    rows.push(["内存", navigator.deviceMemory ? ("约 " + navigator.deviceMemory + " GB") : "读不到（这个浏览器不提供）", "同上"]);
+    var gpu = "读不到";
+    try {
+      var c = document.createElement("canvas");
+      var gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+      if (gl){
+        var ext = gl.getExtension("WEBGL_debug_renderer_info");
+        gpu = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      }
+    } catch(e){}
+    rows.push(["显卡", String(gpu), "显卡型号加驱动版本，区分度很高"]);
+    var cvs = "读不到";
+    try {
+      var cv = document.createElement("canvas"); cv.width = 260; cv.height = 60;
+      var x = cv.getContext("2d");
+      x.textBaseline = "top"; x.font = "16px Arial";
+      x.fillStyle = "#f60"; x.fillRect(110, 2, 70, 22);
+      x.fillStyle = "#069"; x.fillText("代理与 VPS 入门 Fp 1.0", 2, 16);
+      x.fillStyle = "rgba(102,204,0,0.7)"; x.fillText("代理与 VPS 入门 Fp 1.0", 4, 18);
+      cvs = fnv(cv.toDataURL());
+    } catch(e){}
+    rows.push(["Canvas 指纹", cvs, "画同一张图，不同电脑的像素有细微差别；这串编号换台电脑就会变"]);
+    rows.push(["触屏", navigator.maxTouchPoints > 0 ? ("支持（" + navigator.maxTouchPoints + " 点）") : "不支持", "区分手机、平板和电脑"]);
+    rows.push(["请勿追踪", navigator.doNotTrack === "1" ? "已开启" : "未开启", "开的人很少，开了反而多一个特征"]);
+    $("#fpBody").innerHTML = rows.map(function(r){
+      return "<tr><td>" + esc(r[0]) + "</td><td>" + esc(r[1]) + "</td><td>" + esc(r[2]) + "</td></tr>";
+    }).join("");
+    var lang0 = navigator.language || "";
+    var cnTz = /^Asia\/(Shanghai|Chongqing|Harbin|Urumqi|Hong_Kong|Macau|Taipei)$/.test(tz) || off === 8;
+    var zh = /^zh/i.test(lang0);
+    var note = $("#fpNote");
+    if (cnTz || zh){
+      note.innerHTML = "<b>网站能推断出什么</b>你的时区是 " + esc(tz) + "，首选语言是 " + esc(lang0 || "未知") + "。开着代理时，网站看到的 IP 在 VPS 所在的国家，这两项却指向中国，所以很容易判断出“这是一位在用代理的中文用户”。普通上网不用在意，个别对此敏感的服务可能会要求额外验证。";
+    } else {
+      note.className = "verdict ok";
+      note.innerHTML = "<b>网站能推断出什么</b>你的时区和语言没有直接指向中国。但只要把上面这些项组合起来，网站仍然可能认出这台设备。";
+    }
+  }
+  try { buildFp(); } catch(e){ $("#fpBody").innerHTML = "<tr><td colspan=\"3\">这个浏览器没让页面读取这些信息。</td></tr>"; }
+
+  /* ---------- 9. leak checklist (per-device, localStorage) ---------- */
+  var CK = "pvb-leak-check";
+  var boxes = $$("#leakCheck input[type=checkbox]");
+  function loadCk(){ try { return JSON.parse(localStorage.getItem(CK) || "{}") || {}; } catch(e){ return {}; } }
+  function saveCk(o){ try { localStorage.setItem(CK, JSON.stringify(o)); } catch(e){} }
+  function paintCk(){
+    var n = 0;
+    boxes.forEach(function(b){ b.closest("li").classList.toggle("done", b.checked); if (b.checked) n++; });
+    $("#checkCount").textContent = "已完成 " + n + " / " + boxes.length;
+  }
+  var st = loadCk();
+  boxes.forEach(function(b){
+    b.checked = !!st[b.id];
+    b.addEventListener("change", function(){ var o = loadCk(); o[b.id] = b.checked; saveCk(o); paintCk(); });
+  });
+  $("#checkReset").addEventListener("click", function(){ boxes.forEach(function(b){ b.checked = false; }); saveCk({}); paintCk(); });
+  paintCk();
+
+  /* ---------- toc highlight ---------- */
+  var links = {};
+  $$(".toc a").forEach(function(a){ links[a.getAttribute("href").slice(1)] = a; });
+  if ("IntersectionObserver" in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if (en.isIntersecting){
+          Object.keys(links).forEach(function(k){ links[k].setAttribute("aria-current", String(k===en.target.id)); });
+        }
+      });
+    }, { rootMargin:"-30% 0px -60% 0px" });
+    $$("main section").forEach(function(s){ io.observe(s); });
+  }
+})();
+</script>
+</body>
+</html>
